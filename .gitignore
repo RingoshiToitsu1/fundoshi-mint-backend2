@@ -5,3 +5,4 @@ node_modules/
 *.keypair
 *.json.bak
 package-lock.json
+authority.json

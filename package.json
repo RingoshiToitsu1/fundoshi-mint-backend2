@@ -1,15 +1,13 @@
 {
   "name": "fundoshi-mint-backend",
   "version": "1.0.0",
-  "description": "FUNDOSHI NFT Mint Backend - Candy Machine V2",
+  "description": "FUNDOSHI NFT Mint Backend - Sugar CLI",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "@metaplex-foundation/js": "^0.20.1",
-    "@solana/web3.js": "^1.95.8",
     "cors": "^2.8.5",
     "express": "^4.21.2"
   },

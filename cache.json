@@ -1,0 +1,218 @@
+{
+  "program": {
+    "candyMachine": "3pzu8qm6Hw65VH1khEtoU3ZPi8AtGn92oyjuUvVswArJ",
+    "candyGuard": "",
+    "candyMachineCreator": "HBkdQHU5TX4aexuyj4Tv84P7MUmGTYYjSU46vSvamDAt",
+    "collectionMint": "3PcR2FnwpHkfBdpxcU8ArVPrT9BnG6xx4jCm8M1Cbczx"
+  },
+  "items": {
+    "-1": {
+      "name": "FUNDOSHI",
+      "image_hash": "f122a3de175bad9e1cc77472701c2189438952cd2c2faf567940c5473c453a36",
+      "image_link": "https://gateway.irys.xyz/ZGMczgKcjirSVr5yNLboUrZHmyWoBr1hTOgWqQKNCnQ?ext=png",
+      "metadata_hash": "466e0b7c06e97329d6710a46333dcf426e356d94a94cc47f333078a84182d3c9",
+      "metadata_link": "https://gateway.irys.xyz/6ADCdm4sz4zEi4ZJCrGuUYPW1_j0uRnkD1QUCZhZV28",
+      "onChain": true
+    },
+    "0": {
+      "name": "FUNDOSHI #1",
+      "image_hash": "f122a3de175bad9e1cc77472701c2189438952cd2c2faf567940c5473c453a36",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmVDtv5jH6mEUbS47a6Fh3MeYghcCPxJ7WyCzQ1faUMJc4",
+      "metadata_hash": "4792baaf32817adbcd9f3848c08309c7bad52c656fb232c26639841280d21bb7",
+      "metadata_link": "https://gateway.irys.xyz/4-kDSNBEANme6pYCfdlQ4JJ6Vzs95G4j6iHM6Sd8GF8",
+      "onChain": false
+    },
+    "1": {
+      "name": "FUNDOSHI #2",
+      "image_hash": "a27964eb22a0be61ad09fc2ea9f66b4499baaf99c0d89b64a28d87c28261dde7",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmPpH3bPxTgWg53bJtMVvKoZfUtXPEAZ8rBDUbF7n29Yu8",
+      "metadata_hash": "c0a116077609b6a4f3113b7da8c17d23a6d99d0cd0f0bedbf720cff6fe387e9f",
+      "metadata_link": "https://gateway.irys.xyz/dhWuwOiz9r-vZYQgkmZX43hHVH4jfTzr4P_7Xeu87PI",
+      "onChain": false
+    },
+    "2": {
+      "name": "FUNDOSHI #3",
+      "image_hash": "bff5ece136e566cab4cebe89d231724746f7e704e2b0c417ac3e21558bab0cef",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmWaxS6D4aEyqcYTQn5rvTzLE8nLm5Ubu2Q6xsNptzUWE6",
+      "metadata_hash": "3afbd59e6ecbb20d7a124c0895deee3521a6c21d43fc05f75a0d65dc492639e9",
+      "metadata_link": "https://gateway.irys.xyz/tKYHgt9NWIsqALuM7o4FvDa22vngzN5-MEVOP01vOaM",
+      "onChain": false
+    },
+    "3": {
+      "name": "FUNDOSHI #4",
+      "image_hash": "068243e4744722b22ff4db1467a4288be93da404bf7a97ac88d534da796ff5e2",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmdCfnXXoUC7dQQpnRT56sGMAPxMjCc5bLe3sockVkxqEX",
+      "metadata_hash": "ce51e6c6121a9d21f057a3a24f8396c62e6e0bb8ac37a7f0100d15d728151111",
+      "metadata_link": "https://gateway.irys.xyz/auFr1ElvSRv4YKIqUf0mnDBoO2qtzLV2dZiF2VvF5lg",
+      "onChain": false
+    },
+    "4": {
+      "name": "FUNDOSHI #5",
+      "image_hash": "e3c59563c351e0256c37c8257469468399b327e836b30ee901fb32d5c4fc4d53",
+      "image_link": "https://gateway.pinata.cloud/ipfs/Qmb1HtMKb9zcuck1iouf7Xfup8FVjw4HHJbBAWhP9SkPVa",
+      "metadata_hash": "f874368b7ef344a88674c7088240399527edc92e2a95d08ea4db7db23536fd80",
+      "metadata_link": "https://gateway.irys.xyz/epT_pj9ReSFF4hBAKWR8aLY-dODrV9rDkEUmYHfyr20",
+      "onChain": false
+    },
+    "5": {
+      "name": "FUNDOSHI #6",
+      "image_hash": "591c5f14bcda10a23df1d694df04820292eef1f2393634ccf7fff3846fb4bec5",
+      "image_link": "https://gateway.pinata.cloud/ipfs/Qme9ruN9ZjyB4Vc33yfzKYFZ9Gi7vBwb8ZajeddokydTMv",
+      "metadata_hash": "e2d2bf7625735d476c9cc74cd27fd923dbd097c386bab9632a8ed8004ca3225f",
+      "metadata_link": "https://gateway.irys.xyz/Y8YJG83k3OjVA0hr-kXn84FOolEG8WSC4rLCWx78wlk",
+      "onChain": false
+    },
+    "6": {
+      "name": "FUNDOSHI #7",
+      "image_hash": "56f7a7b309df4a64a6bdca47d8a309b1bf2fad9944844312a6ea342698e5ca8f",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmYb9A8v7XKkBucfx8BWB3zZm8c6whA3yDn3EXaggx1qaz",
+      "metadata_hash": "75d0045f2729220fb3521be8778343fc8c9dd24df28fab535ffb590ff144c34f",
+      "metadata_link": "https://gateway.irys.xyz/eHTkVCN2fYW742mqlWg4taVldW_WUCnbZZ5DHovYJ2A",
+      "onChain": false
+    },
+    "7": {
+      "name": "FUNDOSHI #8",
+      "image_hash": "50d7582a3f108c2bd96229c88c422e4770a25c1b40c3ca0b49001767503b489b",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmcQEXfCjWk7YVGatMAVA7og7o3nB6e3bcVgfgY46uFmKZ",
+      "metadata_hash": "9a21300ada8823ad3095ffebd1b1ffb46600a9a6dcbda8304a8a61b6f38ffb26",
+      "metadata_link": "https://gateway.irys.xyz/z5nX0Yv1a_fRWiMuMSjheW7YI2Bcm35VBjLi3EmaeiA",
+      "onChain": false
+    },
+    "8": {
+      "name": "FUNDOSHI #9",
+      "image_hash": "61446f78e543c9cf9ceba4ff03ecd23c73e8717ffe1ea94d22be8ede2489e0e6",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmQnCuJupryhKJ85saE3LWSL6R3a37sF7sw3W7jBtbX6y6",
+      "metadata_hash": "e185f9c0ccfa69b2c0818d6f66575d2b68a241deaf4347852732e3f6ccd29606",
+      "metadata_link": "https://gateway.irys.xyz/F1-jY47HNR3F0Vthd8i2jpsKGbsr9gAB3-UR0UM6WKU",
+      "onChain": false
+    },
+    "9": {
+      "name": "FUNDOSHI #10",
+      "image_hash": "9b7ac3ec67fdb3183031d646bce4938d6c1d10585fabf03389294c249cc677f1",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmUdAhfzevHczmNXJbAY4UGs2M85s57HvwJhqe3sCFpyYP",
+      "metadata_hash": "3c41d978baee3460249cba4c7c7c13fe36ced7658ea34fe4085ff26c2b4dda91",
+      "metadata_link": "https://gateway.irys.xyz/AZPpRcX6wiZ5IM6Z3DTtBTptbNvY0aByRdKMpRU7CZA",
+      "onChain": false
+    },
+    "10": {
+      "name": "FUNDOSHI #11",
+      "image_hash": "a2cdd4e5da3c1321af60ad02c174d9ce1fab9ccbd7b55e188666830d87eea229",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmbtqKVzz3AkqeqenBEQ5HrxfeF1EpgXydGqe7ykzh32xc",
+      "metadata_hash": "dd31c75517bf127c5b9c74338823f688de8a7313a49a9c7ee574f398781e020e",
+      "metadata_link": "https://gateway.irys.xyz/zJTNXnvdtvra4sIWEV19YfCzF_UB0qC3nhh8bokzc9I",
+      "onChain": false
+    },
+    "11": {
+      "name": "FUNDOSHI #12",
+      "image_hash": "7dd6ee87b9f6337daa593ddb68401eb5b3d1307f7127fcee061f4b9c39f31df9",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmYzAz4rsgHmTBT5qDrD3PcV5tjHw9oQ1yFo5y75TGzXis",
+      "metadata_hash": "9ce53df537a91a3e4df857e522866c5951b3f04fe24a83298670ea677eda7803",
+      "metadata_link": "https://gateway.irys.xyz/WNK__K2zOAnHYBzUxj7Equ-Tvc0drfUWCnas_Vp6_UQ",
+      "onChain": false
+    },
+    "12": {
+      "name": "FUNDOSHI #13",
+      "image_hash": "ca6e6ddfbcf9c7505e5e2c8d6d5e42baa7701724ba0b26630ffd1ef0c50c95f5",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmNZdoUDXYWFoMqk5fH58AJ57q5ec7sCJxKnpUDogdZAEm",
+      "metadata_hash": "39dc7ff0c2022555eb0bb86c6ee010a2400bb9381e4ca853df13ac53f5880ff0",
+      "metadata_link": "https://gateway.irys.xyz/VtSHsD-gN8m2ttANJGdPpuAtJvcn7R5OtrNdsmZyTQo",
+      "onChain": false
+    },
+    "13": {
+      "name": "FUNDOSHI #14",
+      "image_hash": "acd2997f4e178645409ec5a087ba1ec70dc14175c200fb814a14da67229c0cbe",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmR2BpYMaRzQ3mS9H5muKxH44LpTYr8yP3WxveMe3ctdkd",
+      "metadata_hash": "12b5e3f9ac83f5c1f7e39c9303494f5d79b0a2792d117d56b31c9e670508d95c",
+      "metadata_link": "https://gateway.irys.xyz/thWpXPV617sAGTzsAAbOTdxgCxVHqPrH4Jtz8gpVT6Y",
+      "onChain": false
+    },
+    "14": {
+      "name": "FUNDOSHI #15",
+      "image_hash": "9d65e50de395f977909d3169c92f4dbd46b391c26d9eeadeaf82fabfdd487979",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmQHWQpMh7psZQQf1b7aUr8rtoT8x9ckkfouxN1crtP1fM",
+      "metadata_hash": "b3cb8b99a19c870a7ca0011c73dcd0ee82d6995e790108b8b3dd8de11a4bb872",
+      "metadata_link": "https://gateway.irys.xyz/GVvX3ai-l_RvEX1k3R5Gs6xyWeWAC52wXYEzIvvT81s",
+      "onChain": false
+    },
+    "15": {
+      "name": "FUNDOSHI #16",
+      "image_hash": "09915f4deacfb21c9f582f954947120976ffaad1a72f71c53acf64501ee57442",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmXZ9kmZ6ghnFe4tDdfkY4uYGHHQ21se4UUNQg57jziaRV",
+      "metadata_hash": "10751dc2df205c056c252bb15045114df83eb96ecdc785982a5874eea90fded1",
+      "metadata_link": "https://gateway.irys.xyz/UG4ixD4zSJrhEyztwoAwF3b2hEvieu4BBoXBKoOnpC8",
+      "onChain": false
+    },
+    "16": {
+      "name": "FUNDOSHI #17",
+      "image_hash": "a2cab0c173892e813dbd9b7b64a1d2eba11b586fe2b859bd1a8bc1203c7931c6",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmPi8d2C7Q9nq4JpWX4acZwXyYnppNVkTXcLNrJUVQTVNW",
+      "metadata_hash": "1a6b0d02ef15041f773cc789dadafc539ec75ee9551f488020bb1156e3482b18",
+      "metadata_link": "https://gateway.irys.xyz/jx7Y_CFuL4VHtwNNaxs0G_8iEh3G5WEg8l-IVqAgza4",
+      "onChain": false
+    },
+    "17": {
+      "name": "FUNDOSHI #18",
+      "image_hash": "aed6c54085d9216d8bbe1971bfbb0624707bfb916d2ee9fa1e9366ac2528bea8",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmWU1ZBf12Yk52QowPdsXLhj4vgGdkYArKGoef46geFpM5",
+      "metadata_hash": "43c1f3bcb73e8f0b409284eedaeda4db9502f70f50d67cb957207efc3de010e6",
+      "metadata_link": "https://gateway.irys.xyz/dsguPymUjL04MNRKEjYWFAshrjh6in6Z2WFZSZL9ywk",
+      "onChain": false
+    },
+    "18": {
+      "name": "FUNDOSHI #19",
+      "image_hash": "587c6448c16cd4004610df14440656e2ef64b2e8441620a39bbe3eeb4b0d5953",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmTwXumKu6Dcz94vFoDmKvSme5okHPrHi3FB8ZRuz2ePKr",
+      "metadata_hash": "b894b822257e6c91f7e063358ae77b3c11ee88ad737698180b4d3c3a869613d4",
+      "metadata_link": "https://gateway.irys.xyz/PBa-4vTuT_v1mYSRILim6RZLf_B3m05zFQoTiPsz1fQ",
+      "onChain": false
+    },
+    "19": {
+      "name": "FUNDOSHI #20",
+      "image_hash": "a1160bb61bbf4eff9a3aab8735dac5480872962604e4f21dc16228f038d80f0f",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmNf81kLudFAPLghBh9omrWs3agpsA6G7AfeDNo7KoBP3a",
+      "metadata_hash": "a2f7c47785bc2497c2d17da76e4c116475128c0fabf77c0a839b0b5dd3d35fcc",
+      "metadata_link": "https://gateway.irys.xyz/NkVQwvRLEF2oZbw1NP_c5Fk0IeRxtNh8042rYeTD5yI",
+      "onChain": false
+    },
+    "20": {
+      "name": "FUNDOSHI #21",
+      "image_hash": "60a6e6b10b5f3b39a462bab310180500162adde86057b7c51e45184c88ab4fbc",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmaeVK1bKaeubTm2rznfFmmzSw6Rsr2LPX8B1BmXDCkfTZ",
+      "metadata_hash": "dbf22788968fa630ee3ad921c70aed9c82649b61b73e328731dce8520e659640",
+      "metadata_link": "https://gateway.irys.xyz/gQ6jZsU1i8i1wiIR7W852ZropOP5reHaf44nj-Zglsk",
+      "onChain": false
+    },
+    "21": {
+      "name": "FUNDOSHI #22",
+      "image_hash": "fd2885e23295493f5d1ae5befd5ddef88b08a1aa5c16988eb1f2f91dbcaa4de0",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmdKTi2EkZ5swNKLYkZiL66tkeS6m6CWR9gZgpmUcKPnik",
+      "metadata_hash": "ff972d2a0767b87090469ec674e65f59479e08325b09f23baf2dd8e078c3976d",
+      "metadata_link": "https://gateway.irys.xyz/JcLv0a9vJME4z-FXfzBnLZ14n7tpnkQobU9MFKD38_A",
+      "onChain": false
+    },
+    "22": {
+      "name": "FUNDOSHI #23",
+      "image_hash": "2ede18e0c4a5a3aa9980950f1e9f395d04f9a4492a8917b4de2996a2310f26a7",
+      "image_link": "https://gateway.pinata.cloud/ipfs/Qmezj6SXfVePHNws7J8UYjLirt7z2ZkCUboVTHDciVwNuM",
+      "metadata_hash": "984fe50b234c9f1e09b098450239e45849a78774aa6d07abf61a2cb6391fd1fc",
+      "metadata_link": "https://gateway.irys.xyz/8nGaWmZqYNW4BGWSYk_A_qXvpVqcoES_oD2uUAt2d8U",
+      "onChain": false
+    },
+    "23": {
+      "name": "FUNDOSHI #24",
+      "image_hash": "0fa981e6616fdd5cbdab02d9d44badb3b1018f0774dc95cfd11b6f9b9f0c224c",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmQKgEpnaGPxFqJuVvvoHEAo8Yep1hkrdMxkWLj5ixs1nS",
+      "metadata_hash": "597ecae84871d47dbbf787abbc5ed0b7718857991fe9dcb6023f2f655834c616",
+      "metadata_link": "https://gateway.irys.xyz/d9LlWFdsmrmm7gAmy5h7j7FF5fLLQjVV-hC_w4tJB74",
+      "onChain": false
+    },
+    "24": {
+      "name": "FUNDOSHI #25",
+      "image_hash": "bcd2fe0a4ac674125b783394bd6637a5180bdb42ab42e85ccf495cd5436bf513",
+      "image_link": "https://gateway.pinata.cloud/ipfs/QmcshRWKSpi8J57AmPKrXimQt7ZXjJNzDarsrtfQxso7W7",
+      "metadata_hash": "4a8bdc9d32c670140bbd40959f7e7b3ebddaeedd275ce39f075d59127fb6e604",
+      "metadata_link": "https://gateway.irys.xyz/fkRhQYY3lca96Ac3qIEG224nf3iEj1JdMjep4bC9n1c",
+      "onChain": false
+    }
+  }
+}

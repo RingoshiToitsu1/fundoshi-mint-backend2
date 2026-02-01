@@ -1,0 +1,23 @@
+{
+  "tokenStandard": "nft",
+  "number": 25,
+  "symbol": "FUNDOSHI",
+  "sellerFeeBasisPoints": 0,
+  "isMutable": true,
+  "isSequential": false,
+  "creators": [
+    {
+      "address": "DNwXiq3n7ZsQFBqYcx7Lxtikzn7ySzENBZxKM8C2Q6Sf",
+      "share": 100
+    }
+  ],
+  "uploadMethod": "bundlr",
+  "ruleSet": null,
+  "awsConfig": null,
+  "pinataConfig": null,
+  "sdriveApiKey": null,
+  "nftStorageAuthToken": null,
+  "shdwStorageAccount": null,
+  "hiddenSettings": null,
+  "guards": null
+}
