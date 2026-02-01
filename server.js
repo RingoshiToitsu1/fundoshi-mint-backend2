@@ -398,18 +398,36 @@ app.post('/mint/sign', async (req, res) => {
     const totalCount = userSignedTx.signatures.length;
     console.log(`Signature status: ${signedCount}/${totalCount} signed`);
 
-    // DON'T filter signatures - Solana will handle null signatures for non-signer accounts
-    // The message format requires all accounts in signatures array even if not all sign
+    // CRITICAL FIX: Reconstruct transaction WITHOUT System Program in signers
+    // System Program should NEVER be a signer, but Phantom/Metaplex adds it
     
-    // Serialize with all signatures (including nulls for non-signers)
+    const SYSTEM_PROGRAM = new PublicKey('11111111111111111111111111111111');
+    
+    // Create new transaction with same instructions
+    const cleanTx = new Transaction();
+    cleanTx.recentBlockhash = userSignedTx.recentBlockhash;
+    cleanTx.feePayer = userSignedTx.feePayer;
+    
+    // Copy all instructions
+    userSignedTx.instructions.forEach(ix => cleanTx.add(ix));
+    
+    // Manually set ONLY the valid signatures (user + backend), excluding System Program
+    cleanTx.signatures = userSignedTx.signatures.filter(s => 
+      s.signature !== null && !s.publicKey.equals(SYSTEM_PROGRAM)
+    );
+    
+    console.log(`Rebuilt transaction with ${cleanTx.signatures.length} signatures (removed System Program)`);
+    console.log('Clean signatures:', cleanTx.signatures.map(s => s.publicKey.toBase58()));
+
+    // Serialize the clean transaction
     try {
-      const fullySigned = userSignedTx.serialize({
+      const fullySigned = cleanTx.serialize({
         requireAllSignatures: false,
         verifySignatures: false
       });
       const fullySignedBase64 = fullySigned.toString('base64');
       
-      console.log(`✅ Serialized transaction (${fullySigned.length} bytes) with ${signedCount} signatures`);
+      console.log(`✅ Serialized clean transaction (${fullySigned.length} bytes)`);
 
       // Clean up cache after successful signing
       transactionCache.delete(cacheKey);
