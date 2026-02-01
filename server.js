@@ -189,22 +189,36 @@ app.post('/mint', async (req, res) => {
       owner: walletPubkey,
     });
 
-    // Convert to transaction
-    const { signature, ...transaction } = await mintBuilder.toTransaction({
-      blockhashWithExpiryBlockHeight: await connection.getLatestBlockhash()
+    // Get blockhash
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+
+    // Build the transaction using sendAndConfirm which returns a proper Transaction
+    const buildOutput = await mintBuilder.toTransaction({
+      blockhashWithExpiryBlockHeight: await connection.getLatestBlockhash('confirmed')
     });
 
-    // Set fee payer to user wallet
-    transaction.feePayer = walletPubkey;
+    // Extract transaction (buildOutput might have nested structure)
+    let transaction;
+    if (buildOutput.transaction) {
+      transaction = buildOutput.transaction;
+    } else {
+      // If toTransaction returns the transaction directly
+      const { signature, ...txData } = buildOutput;
+      transaction = new Transaction(txData);
+    }
 
-    // Partially sign with authority if needed
-    // Note: Candy Machine v3 may require authority signature
+    // Set fee payer and recent blockhash
+    transaction.feePayer = walletPubkey;
+    transaction.recentBlockhash = blockhash;
+
+    // Get all signers from the builder
     const signers = mintBuilder.getSigners();
-    const authoritySigner = signers.find(s => s.publicKey.equals(authorityKeypair.publicKey));
     
-    if (authoritySigner) {
-      transaction.partialSign(authorityKeypair);
-      console.log('✅ Transaction partially signed by authority');
+    // Partially sign with all required signers except the user
+    const signersToUse = signers.filter(s => !s.publicKey.equals(walletPubkey));
+    if (signersToUse.length > 0) {
+      transaction.partialSign(...signersToUse);
+      console.log(`✅ Transaction partially signed by ${signersToUse.length} signer(s)`);
     }
 
     // Serialize transaction for frontend
