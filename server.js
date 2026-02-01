@@ -269,6 +269,25 @@ app.post('/mint', async (req, res) => {
     console.log(`  Instructions: ${transaction.instructions.length}`);
     console.log(`  Signatures: ${transaction.signatures.length}`);
     
+    // Test: Serialize and deserialize to verify it works
+    try {
+      const testSerialized = transaction.serialize({
+        requireAllSignatures: false,
+        verifySignatures: false
+      });
+      console.log(`  Test serialization: ${testSerialized.length} bytes - OK`);
+      
+      // Test deserialize
+      const testTx = Transaction.from(testSerialized);
+      console.log(`  Test deserialization: ${testTx.signatures.length} signatures - OK`);
+      console.log('  Deserialized signatures:', testTx.signatures.map(s => ({
+        pubkey: s.publicKey.toBase58(),
+        hasSig: s.signature !== null
+      })));
+    } catch (testError) {
+      console.error('  Test serialization failed:', testError.message);
+    }
+    
     // Serialize transaction for frontend
     // Use requireAllSignatures: false to allow frontend to add user signature
     const serializedTransaction = transaction.serialize({
@@ -278,7 +297,7 @@ app.post('/mint', async (req, res) => {
 
     const base64Transaction = serializedTransaction.toString('base64');
     
-    console.log(`  Serialized size: ${serializedTransaction.length} bytes`);
+    console.log(`  Final serialized size: ${serializedTransaction.length} bytes`);
     console.log(`✅ Mint transaction created for ${wallet}`);
 
     res.json({
