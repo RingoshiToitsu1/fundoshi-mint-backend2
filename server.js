@@ -199,39 +199,11 @@ app.post('/mint', async (req, res) => {
     }
 
     // Use the Metaplex SDK's mint operation
-    // We'll build the operation but not send it yet
-    const mintOperation = metaplex.candyMachines().mint({
-      candyMachine,
-      collectionUpdateAuthority: authorityKeypair.publicKey,
-      owner: walletPubkey,
+    // For now, this endpoint is disabled - use /mint/simple instead
+    return res.status(501).json({
+      error: 'This endpoint is temporarily disabled. Use /mint/simple instead.',
+      endpoint: '/mint/simple'
     });
-
-    // Build the transaction using the operation's sendAndConfirm method
-    // but intercept it before sending
-    try {
-      // This will throw because we don't have the user's signature yet
-      // But it will build the transaction first
-      const { nft, response } = await mintOperation.sendAndConfirm();
-      
-      // If we get here, the mint succeeded (shouldn't happen without user signature)
-      console.log('Unexpected: Mint succeeded without user signature');
-      res.json({ 
-        success: true,
-        signature: response.signature 
-      });
-      
-    } catch (buildError) {
-      // The operation failed to send, but it should have built the transaction
-      // Let's try to extract it from the error
-      console.log('Build error (expected):', buildError.message);
-      
-      // Since we can't intercept the transaction easily, let's build it manually
-      // using the raw Candy Machine program instructions
-      return res.status(500).json({ 
-        error: 'Unable to build transaction with current Metaplex SDK version',
-        details: 'Need to implement raw Candy Machine v3 instructions'
-      });
-    }
 
   } catch (error) {
     console.error('Error in /mint:', error);
@@ -431,7 +403,7 @@ app.post('/mint/simple', async (req, res) => {
       candyMachine,
       owner: walletPubkey,
       collectionUpdateAuthority: authorityKeypair.publicKey,
-    }).run();
+    }).sendAndConfirm();
 
     console.log('✅ Minted! Signature:', response.signature);
     console.log(`View: https://solscan.io/tx/${response.signature}`);
