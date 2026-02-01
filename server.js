@@ -14,6 +14,21 @@ import nacl from 'tweetnacl';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Transaction cache to store transaction data between /mint and /mint/sign calls
+const transactionCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Clean up expired cache entries every minute
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of transactionCache.entries()) {
+    if (now - value.timestamp > CACHE_TTL) {
+      transactionCache.delete(key);
+      console.log(`Cleaned up expired cache for ${key}`);
+    }
+  }
+}, 60 * 1000);
+
 // Configuration
 const CANDY_MACHINE_ID = new PublicKey('3pzu8qm6Hw65VH1khEtoU3ZPi8AtGn92oyjuUvVswArJ');
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || 'https://solana-mainnet.gateway.tatum.io';
@@ -223,6 +238,14 @@ app.post('/mint', async (req, res) => {
     console.log(`Backend signers needed: ${backendSignersMap.size}`);
     console.log('Backend signer keys:', Array.from(backendSignersMap.values()).map(pk => pk.toBase58()));
 
+    // Store backend signers in cache for /mint/sign to use
+    const cacheKey = wallet;
+    transactionCache.set(cacheKey, {
+      signers: Array.from(backendSignersMap.values()),
+      timestamp: Date.now()
+    });
+    console.log(`Cached signers for ${cacheKey}`);
+
     // IMPORTANT: Compile the message to set up signature slots for ALL required signers
     // This ensures backend signers have slots even though we don't sign yet
     const message = transaction.compileMessage();
@@ -277,6 +300,19 @@ app.post('/mint/sign', async (req, res) => {
 
     console.log(`Adding backend signatures for ${wallet}`);
 
+    // Get cached signers from /mint call
+    const cacheKey = wallet;
+    const cachedData = transactionCache.get(cacheKey);
+    
+    if (!cachedData) {
+      return res.status(400).json({ 
+        error: 'Transaction expired or not found. Please request a new mint transaction.' 
+      });
+    }
+
+    const backendSigners = cachedData.signers;
+    console.log(`Retrieved ${backendSigners.length} cached signer(s) for ${cacheKey}`);
+
     // Deserialize user-signed transaction
     const userSignedTx = Transaction.from(Buffer.from(userSignedTxBase64, 'base64'));
     
@@ -287,37 +323,6 @@ app.post('/mint/sign', async (req, res) => {
     }));
     console.log('Initial signatures:', JSON.stringify(initialSigs, null, 2));
 
-    // Fetch Candy Machine to get signers again
-    const candyMachine = await metaplex.candyMachines().findByAddress({
-      address: CANDY_MACHINE_ID
-    });
-
-    const walletPubkey = new PublicKey(wallet);
-    
-    // Build to get signers
-    const transactionBuilder = await metaplex.candyMachines().builders().mint({
-      candyMachine,
-      collectionUpdateAuthority: authorityKeypair.publicKey,
-      owner: walletPubkey,
-    });
-
-    const signers = transactionBuilder.getSigners();
-    console.log(`Builder returned ${signers.length} total signers`);
-    
-    // Get backend signers and deduplicate
-    const backendSignersMap = new Map();
-    for (const signer of signers) {
-      if (!signer.publicKey.equals(walletPubkey)) {
-        const pubkeyStr = signer.publicKey.toBase58();
-        console.log(`Checking signer: ${pubkeyStr}, hasSecretKey: ${!!signer.secretKey}`);
-        if (!backendSignersMap.has(pubkeyStr) && signer.secretKey) {
-          backendSignersMap.set(pubkeyStr, signer);
-          console.log(`  ✅ Added to backend signers`);
-        }
-      }
-    }
-
-    const backendSigners = Array.from(backendSignersMap.values());
     console.log(`Will sign with ${backendSigners.length} backend signer(s):`);
     backendSigners.forEach((s, i) => {
       console.log(`  ${i + 1}. ${s.publicKey.toBase58()}`);
@@ -413,6 +418,10 @@ app.post('/mint/sign', async (req, res) => {
     const fullySignedBase64 = newTxBuffer.toString('base64');
     
     console.log(`✅ Manually serialized transaction (${newTxBuffer.length} bytes)`);
+
+    // Clean up cache after successful signing
+    transactionCache.delete(cacheKey);
+    console.log(`Cleaned up cache for ${cacheKey}`);
 
     res.json({
       transaction: fullySignedBase64,
