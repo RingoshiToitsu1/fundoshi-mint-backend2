@@ -11,6 +11,29 @@ const PORT = process.env.PORT || 3000;
 
 const CANDY_MACHINE_ID = '3pzu8qm6Hw65VH1khEtoU3ZPi8AtGn92oyjuUvVswArJ';
 
+// Create authority.json from environment variable if it doesn't exist
+async function setupAuthority() {
+  try {
+    // Check if authority.json exists
+    await fs.access('./authority.json');
+    console.log('✅ authority.json found');
+  } catch {
+    // Doesn't exist, create from env var
+    const authorityKey = process.env.AUTHORITY_SECRET_KEY;
+    if (!authorityKey) {
+      throw new Error('AUTHORITY_SECRET_KEY environment variable not set');
+    }
+    
+    // Parse and write to file
+    const keyArray = JSON.parse(authorityKey);
+    await fs.writeFile('./authority.json', JSON.stringify(keyArray, null, 2));
+    console.log('✅ authority.json created from environment variable');
+  }
+}
+
+// Initialize on startup
+await setupAuthority();
+
 app.use(cors());
 app.use(express.json());
 
