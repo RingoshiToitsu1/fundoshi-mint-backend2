@@ -208,13 +208,39 @@ app.post('/mint', async (req, res) => {
     console.log(`Found ${signers.length} signer(s)`);
     
     // Filter out the user's wallet - they will sign on frontend
-    const backendSigners = signers.filter(signer => 
-      !signer.publicKey.equals(walletPubkey)
-    );
+    // Also convert Metaplex signers to standard Keypair if needed
+    const backendSigners = [];
+    
+    for (const signer of signers) {
+      if (!signer.publicKey.equals(walletPubkey)) {
+        // Check if this is a standard Keypair or needs conversion
+        if (signer.secretKey) {
+          // It's already a Keypair-like object with secretKey
+          backendSigners.push(signer);
+        } else if (signer._keypair) {
+          // Metaplex might wrap it
+          backendSigners.push(signer._keypair);
+        }
+      }
+    }
 
     if (backendSigners.length > 0) {
       console.log(`Backend signing with ${backendSigners.length} signer(s)`);
-      transaction.partialSign(...backendSigners);
+      try {
+        transaction.partialSign(...backendSigners);
+        console.log('✅ Transaction partially signed');
+      } catch (signError) {
+        console.error('Error signing transaction:', signError);
+        // Log signer details for debugging
+        backendSigners.forEach((s, i) => {
+          console.log(`Signer ${i}:`, {
+            publicKey: s.publicKey?.toBase58(),
+            hasSecretKey: !!s.secretKey,
+            type: s.constructor.name
+          });
+        });
+        throw signError;
+      }
     }
 
     // Serialize transaction for frontend
