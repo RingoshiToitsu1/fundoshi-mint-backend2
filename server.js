@@ -9,6 +9,7 @@ import {
   sendAndConfirmTransaction,
 } from '@solana/web3.js';
 import { Metaplex } from '@metaplex-foundation/js';
+import nacl from 'tweetnacl';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -322,10 +323,36 @@ app.post('/mint/sign', async (req, res) => {
       console.log(`  ${i + 1}. ${s.publicKey.toBase58()}`);
     });
 
-    // Add backend signatures
+    // Add backend signatures MANUALLY instead of using partialSign
     if (backendSigners.length > 0) {
       try {
-        userSignedTx.partialSign(...backendSigners);
+        // Get the transaction message
+        const message = userSignedTx.compileMessage();
+        const messageBytes = message.serialize();
+        
+        for (const signer of backendSigners) {
+          // Find the signature slot for this signer
+          const signerPubkey = signer.publicKey.toBase58();
+          const sigIndex = userSignedTx.signatures.findIndex(s => 
+            s.publicKey.toBase58() === signerPubkey
+          );
+          
+          if (sigIndex >= 0) {
+            // Sign the message
+            const signature = nacl.sign.detached(messageBytes, signer.secretKey);
+            // Add signature to the slot
+            userSignedTx.signatures[sigIndex].signature = Buffer.from(signature);
+            console.log(`  ✅ Signed for ${signerPubkey} at index ${sigIndex}`);
+          } else {
+            console.log(`  ⚠️ No signature slot found for ${signerPubkey}`);
+            // Add a new signature slot
+            userSignedTx.signatures.push({
+              signature: Buffer.from(nacl.sign.detached(messageBytes, signer.secretKey)),
+              publicKey: signer.publicKey
+            });
+            console.log(`  ✅ Added new signature slot and signed for ${signerPubkey}`);
+          }
+        }
         console.log('✅ Backend signatures added');
       } catch (signError) {
         console.error('❌ Error adding backend signatures:', signError.message);
