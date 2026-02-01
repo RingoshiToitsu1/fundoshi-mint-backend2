@@ -326,31 +326,39 @@ app.post('/mint/sign', async (req, res) => {
     // Add backend signatures MANUALLY instead of using partialSign
     if (backendSigners.length > 0) {
       try {
-        // Get the transaction message
-        const message = userSignedTx.compileMessage();
-        const messageBytes = message.serialize();
+        // DON'T recompile - use the existing serialized transaction to get the message
+        // Recompiling causes "unknown signer" errors
+        const txBuffer = Buffer.from(userSignedTxBase64, 'base64');
+        
+        // The message starts after the signature count (1 byte) and all signatures (64 bytes each)
+        const sigCount = txBuffer[0];
+        const messageStart = 1 + (sigCount * 64);
+        const messageBytes = txBuffer.slice(messageStart);
+        
+        console.log(`Transaction has ${sigCount} signature slots`);
+        console.log(`Message starts at byte ${messageStart}, length: ${messageBytes.length}`);
         
         for (const signer of backendSigners) {
-          // Find the signature slot for this signer
           const signerPubkey = signer.publicKey.toBase58();
+          
+          // Sign the message
+          const signature = nacl.sign.detached(messageBytes, signer.secretKey);
+          console.log(`  ✅ Created signature for ${signerPubkey}`);
+          
+          // Find the signature slot for this signer
           const sigIndex = userSignedTx.signatures.findIndex(s => 
             s.publicKey.toBase58() === signerPubkey
           );
           
           if (sigIndex >= 0) {
-            // Sign the message
-            const signature = nacl.sign.detached(messageBytes, signer.secretKey);
-            // Add signature to the slot
             userSignedTx.signatures[sigIndex].signature = Buffer.from(signature);
-            console.log(`  ✅ Signed for ${signerPubkey} at index ${sigIndex}`);
+            console.log(`  ✅ Added signature at index ${sigIndex}`);
           } else {
-            console.log(`  ⚠️ No signature slot found for ${signerPubkey}`);
-            // Add a new signature slot
+            console.log(`  ⚠️ No signature slot found for ${signerPubkey}, adding new slot`);
             userSignedTx.signatures.push({
-              signature: Buffer.from(nacl.sign.detached(messageBytes, signer.secretKey)),
+              signature: Buffer.from(signature),
               publicKey: signer.publicKey
             });
-            console.log(`  ✅ Added new signature slot and signed for ${signerPubkey}`);
           }
         }
         console.log('✅ Backend signatures added');
