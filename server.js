@@ -8,7 +8,7 @@ import {
   Keypair,
   sendAndConfirmTransaction,
 } from '@solana/web3.js';
-import { Metaplex } from '@metaplex-foundation/js';
+import { Metaplex, keypairIdentity } from '@metaplex-foundation/js';
 import nacl from 'tweetnacl';
 
 const app = express();
@@ -49,7 +49,7 @@ try {
 }
 
 // Initialize Metaplex
-const metaplex = Metaplex.make(connection);
+const metaplex = Metaplex.make(connection).use(keypairIdentity(authorityKeypair));
 
 // Middleware
 app.use(cors());
@@ -198,53 +198,40 @@ app.post('/mint', async (req, res) => {
       return res.status(400).json({ error: 'All NFTs have been minted' });
     }
 
-    // Build the mint transaction using Metaplex
-    // The builder pattern in Metaplex JS SDK works differently
-    const mintBuilder = await metaplex.candyMachines().builders().mint({
+    // Use the Metaplex SDK's mint operation
+    // We'll build the operation but not send it yet
+    const mintOperation = metaplex.candyMachines().mint({
       candyMachine,
       collectionUpdateAuthority: authorityKeypair.publicKey,
       owner: walletPubkey,
     });
 
-    // Get blockhash
-    const { blockhash } = await connection.getLatestBlockhash('confirmed');
-
-    // The builder has the transaction and signers built in
-    // We need to extract them properly
-    const context = mintBuilder.getContext();
-    
-    console.log('Builder context:', Object.keys(context));
-
-    // Get the transaction and signers from context
-    const transaction = context.transaction || new Transaction();
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = walletPubkey;
-
-    // Get signers - they should be in the context
-    const signers = context.signers || [];
-    const backendSigners = signers.filter(s => !s.publicKey.equals(walletPubkey));
-    
-    console.log(`Found ${signers.length} total signers, ${backendSigners.length} backend signers`);
-    
-    if (backendSigners.length > 0) {
-      transaction.partialSign(...backendSigners);
-      console.log('✅ Backend signatures added');
+    // Build the transaction using the operation's sendAndConfirm method
+    // but intercept it before sending
+    try {
+      // This will throw because we don't have the user's signature yet
+      // But it will build the transaction first
+      const { nft, response } = await mintOperation.sendAndConfirm();
+      
+      // If we get here, the mint succeeded (shouldn't happen without user signature)
+      console.log('Unexpected: Mint succeeded without user signature');
+      res.json({ 
+        success: true,
+        signature: response.signature 
+      });
+      
+    } catch (buildError) {
+      // The operation failed to send, but it should have built the transaction
+      // Let's try to extract it from the error
+      console.log('Build error (expected):', buildError.message);
+      
+      // Since we can't intercept the transaction easily, let's build it manually
+      // using the raw Candy Machine program instructions
+      return res.status(500).json({ 
+        error: 'Unable to build transaction with current Metaplex SDK version',
+        details: 'Need to implement raw Candy Machine v3 instructions'
+      });
     }
-
-    // Serialize for frontend
-    const serialized = transaction.serialize({
-      requireAllSignatures: false,
-      verifySignatures: false
-    });
-
-    const base64Transaction = serialized.toString('base64');
-
-    console.log(`✅ Transaction created (${serialized.length} bytes)`);
-
-    res.json({
-      transaction: base64Transaction,
-      message: 'Transaction ready for signing'
-    });
 
   } catch (error) {
     console.error('Error in /mint:', error);
@@ -413,6 +400,59 @@ app.post('/mint/sign', async (req, res) => {
   } catch (error) {
     console.error('Error in /mint/sign:', error);
     res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
+// SIMPLE MINT - Let Metaplex handle everything (TEST ENDPOINT)
+app.post('/mint/simple', async (req, res) => {
+  try {
+    const { wallet } = req.body;
+    if (!wallet) return res.status(400).json({ error: 'Wallet required' });
+
+    const walletPubkey = new PublicKey(wallet);
+
+    const eligibility = await checkEligibility(wallet);
+    if (!eligibility.eligible) {
+      return res.status(403).json({ error: eligibility.reason });
+    }
+
+    console.log(`Simple mint for ${wallet}...`);
+
+    const candyMachine = await metaplex.candyMachines().findByAddress({
+      address: CANDY_MACHINE_ID
+    });
+
+    if (candyMachine.itemsRemaining.toNumber() === 0) {
+      return res.status(400).json({ error: 'All NFTs minted' });
+    }
+
+    // Let Metaplex do EVERYTHING - authority handles all signing
+    const { nft, response } = await metaplex.candyMachines().mint({
+      candyMachine,
+      owner: walletPubkey,
+      collectionUpdateAuthority: authorityKeypair.publicKey,
+    }).run();
+
+    console.log('✅ Minted! Signature:', response.signature);
+    console.log(`View: https://solscan.io/tx/${response.signature}`);
+
+    // Record the mint
+    const minted = await loadMinted();
+    if (!minted.includes(wallet)) {
+      minted.push(wallet);
+      await saveMinted(minted);
+    }
+
+    res.json({
+      success: true,
+      signature: response.signature,
+      nft: nft.address.toBase58(),
+      solscan: `https://solscan.io/tx/${response.signature}`
+    });
+
+  } catch (error) {
+    console.error('Simple mint error:', error);
+    res.status(500).json({ error: error.message, details: error.toString() });
   }
 });
 
