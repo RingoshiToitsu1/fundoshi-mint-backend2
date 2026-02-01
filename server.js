@@ -274,8 +274,8 @@ app.post('/mint', async (req, res) => {
     }
 
     console.log('Transaction signature slots:', transaction.signatures.map(s => ({
-      pubkey: s.publicKey.toBase58(),
-      isFeePayer: s.publicKey.equals(walletPubkey)
+      pubkey: s.publicKey ? s.publicKey.toBase58() : 'null',
+      isFeePayer: s.publicKey ? s.publicKey.equals(walletPubkey) : false
     })));
 
     // DO NOT sign here - send unsigned transaction
