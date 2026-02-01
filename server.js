@@ -1,27 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import { promises as fs } from 'fs';
-import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { 
-  fetchCandyMachine,
-  mintV2,
-  mplCandyMachine
-} from '@metaplex-foundation/mpl-candy-machine';
-import {
-  generateSigner,
-  transactionBuilder,
-  publicKey,
-  some,
-  sol
-} from '@metaplex-foundation/umi';
-import { createSignerFromKeypair, signerIdentity } from '@metaplex-foundation/umi';
-import { Connection, Keypair, PublicKey as SolanaPublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, Keypair } from '@solana/web3.js';
+import { Metaplex, keypairIdentity, bundlrStorage } from '@metaplex-foundation/js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const CANDY_MACHINE_ADDRESS = '3pzu8qm6Hw65VH1khEtoU3ZPi8AtGn92oyjuUvVswArJ';
+const CANDY_MACHINE_ID = new PublicKey('3pzu8qm6Hw65VH1khEtoU3ZPi8AtGn92oyjuUvVswArJ');
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || 'https://mainnet.helius-rpc.com/?api-key=0267bb20-16b0-42e9-a5f0-c0c0f0858502';
+const connection = new Connection(RPC_ENDPOINT, 'confirmed');
 
 // Load authority keypair
 let authorityKeypair;
@@ -34,18 +22,12 @@ try {
   process.exit(1);
 }
 
-// Create Umi instance
-const umi = createUmi(RPC_ENDPOINT).use(mplCandyMachine());
+// Setup Metaplex with authority as identity
+const metaplex = Metaplex.make(connection)
+  .use(keypairIdentity(authorityKeypair))
+  .use(bundlrStorage());
 
-// Convert Solana Keypair to Umi keypair and set as signer
-const umiKeypair = umi.eddsa.createKeypairFromSecretKey(authorityKeypair.secretKey);
-const authoritySigner = createSignerFromKeypair(umi, umiKeypair);
-umi.use(signerIdentity(authoritySigner));
-
-console.log('✅ Umi initialized with authority');
-
-// Also keep regular Solana connection for RPC proxy
-const connection = new Connection(RPC_ENDPOINT, 'confirmed');
+console.log('✅ Metaplex initialized for Candy Machine V2');
 
 app.use(cors());
 app.use(express.json());
@@ -98,128 +80,41 @@ app.post('/mint/check', async (req, res) => {
   }
 });
 
-// Mint using Umi with MintV2 - NO GUARD
-app.post('/mint/noguard', async (req, res) => {
+// Mint using Metaplex JS SDK for Candy Machine V2
+app.post('/mint/v2', async (req, res) => {
   try {
     const { wallet } = req.body;
     if (!wallet) return res.status(400).json({ error: 'Wallet required' });
+
+    const walletPubkey = new PublicKey(wallet);
 
     const eligibility = await checkEligibility(wallet);
     if (!eligibility.eligible) {
       return res.status(403).json({ error: eligibility.reason });
     }
 
-    console.log(`Minting for ${wallet} WITHOUT guard...`);
+    console.log(`Minting for ${wallet} using CM V2...`);
 
-    const candyMachineAddress = publicKey(CANDY_MACHINE_ADDRESS);
-    const candyMachine = await fetchCandyMachine(umi, candyMachineAddress);
+    // Fetch candy machine (V2)
+    const candyMachine = await metaplex.candyMachines().findByAddress({
+      address: CANDY_MACHINE_ID
+    });
 
-    console.log(`CM: ${candyMachine.itemsRedeemed}/${candyMachine.data.itemsAvailable}`);
+    console.log(`CM V2: ${candyMachine.itemsMinted}/${candyMachine.itemsAvailable} minted`);
 
-    if (candyMachine.itemsRedeemed >= candyMachine.data.itemsAvailable) {
+    if (candyMachine.itemsRemaining.isZero()) {
       return res.status(400).json({ error: 'All NFTs minted' });
     }
 
-    const nftMint = generateSigner(umi);
-    const ownerPublicKey = publicKey(wallet);
-
-    // Try minting WITHOUT specifying candy guard at all
-    const mintIx = await mintV2(umi, {
-      candyMachine: candyMachineAddress,
-      nftMint,
-      collectionMint: candyMachine.collectionMint,
-      collectionUpdateAuthority: candyMachine.authority,
-      payer: authoritySigner,
-      minter: ownerPublicKey,
-      // NO candyGuard parameter
-      // NO group parameter
+    // Mint NFT - Metaplex handles everything
+    const { nft, response } = await metaplex.candyMachines().mint({
+      candyMachine,
+      owner: walletPubkey,
+      collectionUpdateAuthority: authorityKeypair.publicKey,
     });
 
-    const tx = await mintIx.sendAndConfirm(umi);
-    console.log('✅ Minted!', Buffer.from(tx.signature).toString('base64'));
+    console.log('✅ Minted! Signature:', response.signature);
 
-    const minted = await loadMinted();
-    if (!minted.includes(wallet)) {
-      minted.push(wallet);
-      await saveMinted(minted);
-    }
-
-    const sig = Buffer.from(tx.signature).toString('base64');
-    res.json({
-      success: true,
-      signature: sig,
-      nft: nftMint.publicKey,
-      solscan: `https://solscan.io/tx/${sig}`
-    });
-
-  } catch (error) {
-    console.error('No-guard mint error:', error);
-    res.status(500).json({ 
-      error: error.message,
-      hint: 'Your Candy Machine may be misconfigured. Check mintAuthority on Solscan.'
-    });
-  }
-});
-
-// Mint using Umi with MintV2
-app.post('/mint/umi', async (req, res) => {
-  try {
-    const { wallet } = req.body;
-    if (!wallet) return res.status(400).json({ error: 'Wallet required' });
-
-    const eligibility = await checkEligibility(wallet);
-    if (!eligibility.eligible) {
-      return res.status(403).json({ error: eligibility.reason });
-    }
-
-    console.log(`Minting for ${wallet} using Umi + MintV2...`);
-
-    // Fetch candy machine
-    const candyMachineAddress = publicKey(CANDY_MACHINE_ADDRESS);
-    const candyMachine = await fetchCandyMachine(umi, candyMachineAddress);
-
-    console.log(`Candy Machine: ${candyMachine.itemsRedeemed}/${candyMachine.data.itemsAvailable} minted`);
-    console.log(`Candy Guard:`, candyMachine.mintAuthority);
-
-    if (candyMachine.itemsRedeemed >= candyMachine.data.itemsAvailable) {
-      return res.status(400).json({ error: 'All NFTs minted' });
-    }
-
-    // Generate NFT mint signer
-    const nftMint = generateSigner(umi);
-
-    // Convert wallet address to Umi public key
-    const ownerPublicKey = publicKey(wallet);
-
-    // Build mint instruction
-    // Check if candy machine has a guard
-    const mintArgs = {
-      candyMachine: candyMachineAddress,
-      nftMint,
-      collectionMint: candyMachine.collectionMint,
-      collectionUpdateAuthority: candyMachine.authority,
-      payer: authoritySigner,
-      minter: ownerPublicKey,
-    };
-
-    // Add candy guard if it exists
-    if (candyMachine.mintAuthority && candyMachine.mintAuthority.__option === 'Some') {
-      mintArgs.candyGuard = candyMachine.mintAuthority.value;
-      mintArgs.group = some('default');
-      console.log('Using candy guard:', candyMachine.mintAuthority.value);
-    }
-
-    // Create mint instruction using MintV2
-    const mintIx = await mintV2(umi, mintArgs);
-
-    // Build and send transaction
-    const tx = await mintIx.sendAndConfirm(umi);
-
-    console.log('✅ Minted! Signature:', tx.signature);
-
-    // Convert signature to base58
-    const signatureBase58 = Buffer.from(tx.signature).toString('base64');
-    
     // Record the mint
     const minted = await loadMinted();
     if (!minted.includes(wallet)) {
@@ -229,13 +124,13 @@ app.post('/mint/umi', async (req, res) => {
 
     res.json({
       success: true,
-      signature: signatureBase58,
-      nft: nftMint.publicKey,
-      solscan: `https://solscan.io/tx/${signatureBase58}`
+      signature: response.signature,
+      nft: nft.address.toBase58(),
+      solscan: `https://solscan.io/tx/${response.signature}`
     });
 
   } catch (error) {
-    console.error('Umi mint error:', error);
+    console.error('V2 mint error:', error);
     res.status(500).json({ 
       error: error.message,
       details: error.toString()
@@ -269,13 +164,14 @@ app.post('/rpc', async (req, res) => {
 
 app.get('/', (req, res) => {
   res.json({
-    name: 'FUNDOSHI Mint Backend (Umi)',
-    endpoints: ['/mint/check', '/mint/umi', '/rpc'],
-    candyMachine: CANDY_MACHINE_ADDRESS
+    name: 'FUNDOSHI Mint Backend (Candy Machine V2)',
+    endpoints: ['/mint/check', '/mint/v2', '/rpc'],
+    candyMachine: CANDY_MACHINE_ID.toBase58(),
+    version: 'V2'
   });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Umi server running on port ${PORT}`);
-  console.log(`Candy Machine: ${CANDY_MACHINE_ADDRESS}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Candy Machine V2: ${CANDY_MACHINE_ID.toBase58()}`);
 });
