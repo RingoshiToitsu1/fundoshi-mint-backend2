@@ -406,8 +406,23 @@ app.post('/mint/sign', async (req, res) => {
     const totalCount = userSignedTx.signatures.length;
     console.log(`Signature status: ${signedCount}/${totalCount} signed`);
 
-    // Serialize with all signatures including nulls
-    // Use the existing transaction serialize method which handles this correctly
+    // CRITICAL FIX: Remove System Program and other non-signer accounts from signatures
+    // System Program (11111111111111111111111111111111) should NEVER be a signer
+    const SYSTEM_PROGRAM = '11111111111111111111111111111111';
+    
+    // Filter out non-signers (accounts without signatures)
+    const cleanedSignatures = userSignedTx.signatures.filter(s => {
+      const pubkey = s.publicKey.toBase58();
+      // Keep only signatures that are actually signed OR are valid signers waiting for signature
+      return s.signature !== null && pubkey !== SYSTEM_PROGRAM;
+    });
+    
+    console.log(`Cleaned signatures: ${cleanedSignatures.length} (removed ${totalCount - cleanedSignatures.length})`);
+    
+    // Rebuild transaction with only valid signatures
+    userSignedTx.signatures = cleanedSignatures;
+
+    // Serialize with cleaned signatures
     try {
       const fullySigned = userSignedTx.serialize({
         requireAllSignatures: false,
@@ -427,41 +442,7 @@ app.post('/mint/sign', async (req, res) => {
       });
     } catch (serializeError) {
       console.error('Serialization error:', serializeError.message);
-      // If serialize fails, try manual construction
-      const originalTxBuffer = Buffer.from(userSignedTxBase64, 'base64');
-      const sigCount = userSignedTx.signatures.length;
-      
-      // Calculate message start (1 byte sig count + sigCount * 64 bytes per sig)
-      const messageStart = 1 + (sigCount * 64);
-      const messageBytes = originalTxBuffer.slice(messageStart);
-      
-      // Build new buffer
-      const newBuffer = Buffer.alloc(messageStart + messageBytes.length);
-      newBuffer.writeUInt8(sigCount, 0);
-      
-      // Write signatures
-      let offset = 1;
-      for (const sig of userSignedTx.signatures) {
-        if (sig.signature) {
-          sig.signature.copy(newBuffer, offset);
-        } else {
-          newBuffer.fill(0, offset, offset + 64);
-        }
-        offset += 64;
-      }
-      
-      // Copy message
-      messageBytes.copy(newBuffer, offset);
-      
-      const fullySignedBase64 = newBuffer.toString('base64');
-      console.log(`✅ Manually serialized transaction (${newBuffer.length} bytes)`);
-      
-      transactionCache.delete(cacheKey);
-      
-      res.json({
-        transaction: fullySignedBase64,
-        message: 'Transaction fully signed'
-      });
+      res.status(500).json({ error: 'Failed to serialize transaction: ' + serializeError.message });
     }
 
   } catch (error) {
