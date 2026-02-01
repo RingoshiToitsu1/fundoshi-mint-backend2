@@ -98,8 +98,11 @@ app.post('/mint/sugar', async (req, res) => {
 
     console.log(`Minting for ${wallet} using Sugar CLI...`);
 
-    // Execute Sugar CLI mint command
-    const command = `sugar mint --number 1 --receiver ${wallet}`;
+    // Execute Sugar CLI mint command with explicit RPC and keypair
+    const rpcUrl = process.env.RPC_ENDPOINT || 'https://mainnet.helius-rpc.com/?api-key=0267bb20-16b0-42e9-a5f0-c0c0f0858502';
+    const command = `sugar mint --number 1 --receiver ${wallet} --keypair ./authority.json --rpc-url ${rpcUrl}`;
+    
+    console.log('Executing:', command);
     
     const { stdout, stderr } = await execAsync(command, {
       cwd: process.cwd(), // Should have cache.json here
