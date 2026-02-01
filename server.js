@@ -203,19 +203,11 @@ app.post('/mint', async (req, res) => {
       transaction.add(instruction);
     });
 
-    // IMPORTANT: Compile the transaction first to set up signature structure
-    // This ensures feePayer is first in signatures array
-    const message = transaction.compileMessage();
-    transaction.signatures = message.accountKeys.map(pubkey => ({
-      signature: null,
-      publicKey: pubkey
-    }));
-
-    // Get signers and partially sign (excluding the user's wallet)
+    // Get signers from the builder
     const signers = transactionBuilder.getSigners();
-    console.log(`Found ${signers.length} signer(s)`);
+    console.log(`Found ${signers.length} total signer(s) from builder`);
     
-    // Filter out the user's wallet - they will sign on frontend
+    // Filter to only backend signers (not the user wallet)
     // Also convert Metaplex signers to standard Keypair if needed
     const backendSigners = [];
     
@@ -232,35 +224,29 @@ app.post('/mint', async (req, res) => {
       }
     }
 
+    console.log(`User wallet (feePayer): ${walletPubkey.toBase58()}`);
+    console.log(`Backend will sign with ${backendSigners.length} signer(s):`);
+    backendSigners.forEach((s, i) => {
+      console.log(`  ${i + 1}. ${s.publicKey.toBase58()}`);
+    });
+
     if (backendSigners.length > 0) {
-      console.log(`Backend signing with ${backendSigners.length} signer(s)`);
       try {
         transaction.partialSign(...backendSigners);
-        console.log('✅ Transaction partially signed');
-        
-        // Log signature details
-        console.log('Signatures after backend signing:', 
-          transaction.signatures.map((s, idx) => ({
-            index: idx,
-            pubkey: s.publicKey?.toBase58(),
-            signature: s.signature ? 'SIGNED' : 'UNSIGNED',
-            isFeePayer: s.publicKey?.equals(walletPubkey)
-          }))
-        );
+        console.log('✅ Transaction partially signed by backend');
       } catch (signError) {
         console.error('Error signing transaction:', signError);
-        // Log signer details for debugging
-        backendSigners.forEach((s, i) => {
-          console.log(`Signer ${i}:`, {
-            publicKey: s.publicKey?.toBase58(),
-            hasSecretKey: !!s.secretKey,
-            type: s.constructor.name
-          });
-        });
         throw signError;
       }
+    } else {
+      console.log('⚠️ No backend signers found - user will sign entire transaction');
     }
 
+    // Log transaction info before serialization
+    console.log('Transaction details:');
+    console.log(`  Instructions: ${transaction.instructions.length}`);
+    console.log(`  Signatures: ${transaction.signatures.length}`);
+    
     // Serialize transaction for frontend
     // Use requireAllSignatures: false to allow frontend to add user signature
     const serializedTransaction = transaction.serialize({
@@ -269,9 +255,9 @@ app.post('/mint', async (req, res) => {
     });
 
     const base64Transaction = serializedTransaction.toString('base64');
-
+    
+    console.log(`  Serialized size: ${serializedTransaction.length} bytes`);
     console.log(`✅ Mint transaction created for ${wallet}`);
-    console.log(`Transaction has ${transaction.signatures.length} signatures`);
 
     res.json({
       transaction: base64Transaction,
