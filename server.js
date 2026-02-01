@@ -1,78 +1,61 @@
 import express from 'express';
 import cors from 'cors';
 import { promises as fs } from 'fs';
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { 
+  fetchCandyMachine,
+  mintV2,
+  mplCandyMachine
+} from '@metaplex-foundation/mpl-candy-machine';
 import {
-  Connection,
-  PublicKey,
-  Transaction,
-  Keypair,
-  sendAndConfirmTransaction,
-} from '@solana/web3.js';
-import { Metaplex, keypairIdentity } from '@metaplex-foundation/js';
-import nacl from 'tweetnacl';
+  generateSigner,
+  transactionBuilder,
+  publicKey,
+  some,
+  sol
+} from '@metaplex-foundation/umi';
+import { createSignerFromKeypair, signerIdentity } from '@metaplex-foundation/umi';
+import { Connection, Keypair, PublicKey as SolanaPublicKey } from '@solana/web3.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Transaction cache to store transaction data between /mint and /mint/sign calls
-const transactionCache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CANDY_MACHINE_ADDRESS = '3pzu8qm6Hw65VH1khEtoU3ZPi8AtGn92oyjuUvVswArJ';
+const RPC_ENDPOINT = process.env.RPC_ENDPOINT || 'https://mainnet.helius-rpc.com/?api-key=0267bb20-16b0-42e9-a5f0-c0c0f0858502';
 
-// Clean up expired cache entries every minute
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of transactionCache.entries()) {
-    if (now - value.timestamp > CACHE_TTL) {
-      transactionCache.delete(key);
-      console.log(`Cleaned up expired cache for ${key}`);
-    }
-  }
-}, 60 * 1000);
-
-// Configuration
-const CANDY_MACHINE_ID = new PublicKey('3pzu8qm6Hw65VH1khEtoU3ZPi8AtGn92oyjuUvVswArJ');
-const RPC_ENDPOINT = process.env.RPC_ENDPOINT || 'https://solana-mainnet.gateway.tatum.io';
-const connection = new Connection(RPC_ENDPOINT, 'confirmed');
-
-// Load authority keypair from environment
+// Load authority keypair
 let authorityKeypair;
 try {
   const secretKey = JSON.parse(process.env.AUTHORITY_SECRET_KEY || '[]');
-  if (secretKey.length !== 64) {
-    throw new Error('Invalid authority secret key length');
-  }
   authorityKeypair = Keypair.fromSecretKey(Uint8Array.from(secretKey));
-  console.log('✅ Authority keypair loaded:', authorityKeypair.publicKey.toBase58());
+  console.log('✅ Authority:', authorityKeypair.publicKey.toBase58());
 } catch (error) {
-  console.error('❌ Failed to load authority keypair:', error.message);
+  console.error('❌ Failed to load authority');
   process.exit(1);
 }
 
-// Initialize Metaplex
-const metaplex = Metaplex.make(connection).use(keypairIdentity(authorityKeypair));
+// Create Umi instance
+const umi = createUmi(RPC_ENDPOINT).use(mplCandyMachine());
 
-// Middleware
+// Convert Solana Keypair to Umi keypair and set as signer
+const umiKeypair = umi.eddsa.createKeypairFromSecretKey(authorityKeypair.secretKey);
+const authoritySigner = createSignerFromKeypair(umi, umiKeypair);
+umi.use(signerIdentity(authoritySigner));
+
+console.log('✅ Umi initialized with authority');
+
+// Also keep regular Solana connection for RPC proxy
+const connection = new Connection(RPC_ENDPOINT, 'confirmed');
+
 app.use(cors());
 app.use(express.json());
-
-// Logging middleware
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-  next();
-});
 
 // Helper functions
 async function loadWhitelist() {
   try {
     const data = await fs.readFile('./whitelist.json', 'utf-8');
-    const whitelist = JSON.parse(data);
-    if (!Array.isArray(whitelist)) {
-      console.error('⚠️ whitelist.json is not an array, returning empty array');
-      return [];
-    }
-    return whitelist;
+    return JSON.parse(data);
   } catch (error) {
-    console.error('⚠️ Error loading whitelist:', error.message);
     return [];
   }
 }
@@ -80,23 +63,13 @@ async function loadWhitelist() {
 async function loadMinted() {
   try {
     const data = await fs.readFile('./minted.json', 'utf-8');
-    const minted = JSON.parse(data);
-    if (!Array.isArray(minted)) {
-      console.error('⚠️ minted.json is not an array, returning empty array');
-      return [];
-    }
-    return minted;
+    return JSON.parse(data);
   } catch (error) {
-    console.error('⚠️ Error loading minted, creating new file');
-    await fs.writeFile('./minted.json', JSON.stringify([], null, 2));
     return [];
   }
 }
 
 async function saveMinted(minted) {
-  if (!Array.isArray(minted)) {
-    throw new Error('minted must be an array');
-  }
   await fs.writeFile('./minted.json', JSON.stringify(minted, null, 2));
 }
 
@@ -104,310 +77,76 @@ async function checkEligibility(wallet) {
   const whitelist = await loadWhitelist();
   const minted = await loadMinted();
 
-  // Check if wallet is in whitelist
-  const isWhitelisted = whitelist.includes(wallet);
-  if (!isWhitelisted) {
+  if (!whitelist.includes(wallet)) {
     return { eligible: false, reason: 'Wallet not on whitelist' };
   }
 
-  // Check if wallet has already minted
-  const hasMinted = minted.includes(wallet);
-  if (hasMinted) {
+  if (minted.includes(wallet)) {
     return { eligible: false, reason: 'Wallet has already minted' };
   }
 
   return { eligible: true };
 }
 
-// Routes
-app.get('/', (req, res) => {
-  res.json({
-    name: 'FUNDOSHI Mint Backend',
-    status: 'online',
-    candyMachine: CANDY_MACHINE_ID.toBase58(),
-    authority: authorityKeypair.publicKey.toBase58(),
-    endpoints: ['/mint/check', '/mint', '/rpc']
-  });
-});
-
-// Check mint eligibility
 app.post('/mint/check', async (req, res) => {
   try {
     const { wallet } = req.body;
-
-    if (!wallet) {
-      return res.status(400).json({ error: 'Wallet address required' });
-    }
-
-    // Validate wallet address
-    let walletPubkey;
-    try {
-      walletPubkey = new PublicKey(wallet);
-    } catch (error) {
-      return res.status(400).json({ error: 'Invalid wallet address' });
-    }
-
     const eligibility = await checkEligibility(wallet);
-    console.log(`Eligibility check for ${wallet}:`, eligibility);
-
     res.json(eligibility);
   } catch (error) {
-    console.error('Error in /mint/check:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Create mint transaction
-app.post('/mint', async (req, res) => {
-  try {
-    const { wallet } = req.body;
-
-    if (!wallet) {
-      return res.status(400).json({ error: 'Wallet address required' });
-    }
-
-    // Validate wallet address
-    let walletPubkey;
-    try {
-      walletPubkey = new PublicKey(wallet);
-    } catch (error) {
-      return res.status(400).json({ error: 'Invalid wallet address' });
-    }
-
-    // Check eligibility
-    const eligibility = await checkEligibility(wallet);
-    if (!eligibility.eligible) {
-      return res.status(403).json({ error: eligibility.reason });
-    }
-
-    console.log(`Creating mint transaction for ${wallet}`);
-
-    // Fetch Candy Machine
-    const candyMachine = await metaplex.candyMachines().findByAddress({
-      address: CANDY_MACHINE_ID
-    });
-
-    console.log('Candy Machine loaded:', {
-      itemsAvailable: candyMachine.itemsAvailable.toString(),
-      itemsMinted: candyMachine.itemsMinted.toString(),
-      itemsRemaining: candyMachine.itemsRemaining.toString()
-    });
-
-    // Check if items are available
-    if (candyMachine.itemsRemaining.toNumber() === 0) {
-      return res.status(400).json({ error: 'All NFTs have been minted' });
-    }
-
-    // Use the Metaplex SDK's mint operation
-    // For now, this endpoint is disabled - use /mint/simple instead
-    return res.status(501).json({
-      error: 'This endpoint is temporarily disabled. Use /mint/simple instead.',
-      endpoint: '/mint/simple'
-    });
-
-  } catch (error) {
-    console.error('Error in /mint:', error);
-    res.status(500).json({ error: error.message, stack: error.stack });
-  }
-});
-
-// Sign transaction after user has signed
-app.post('/mint/sign', async (req, res) => {
-  try {
-    const { wallet, transaction: userSignedTxBase64 } = req.body;
-
-    if (!wallet || !userSignedTxBase64) {
-      return res.status(400).json({ error: 'Wallet and transaction required' });
-    }
-
-    console.log(`Adding backend signatures for ${wallet}`);
-
-    // Get cached signers from /mint call
-    const cacheKey = wallet;
-    const cachedData = transactionCache.get(cacheKey);
-    
-    if (!cachedData) {
-      return res.status(400).json({ 
-        error: 'Transaction expired or not found. Please request a new mint transaction.' 
-      });
-    }
-
-    const backendSigners = cachedData.signers;
-    console.log(`Retrieved ${backendSigners.length} cached signer(s) for ${cacheKey}`);
-    
-    // Debug: Check structure of cached signers
-    backendSigners.forEach((s, i) => {
-      console.log(`Cached signer ${i}:`, {
-        type: s.constructor?.name,
-        hasPublicKey: !!s.publicKey,
-        hasSecretKey: !!s.secretKey,
-        publicKeyType: s.publicKey?.constructor?.name
-      });
-    });
-
-    // Deserialize user-signed transaction
-    const userSignedTx = Transaction.from(Buffer.from(userSignedTxBase64, 'base64'));
-    
-    console.log('User-signed transaction received:');
-    const initialSigs = userSignedTx.signatures.map(s => ({
-      pubkey: s.publicKey.toBase58(),
-      hasSig: s.signature !== null
-    }));
-    console.log('Initial signatures:', JSON.stringify(initialSigs, null, 2));
-
-    console.log(`Will sign with ${backendSigners.length} backend signer(s):`);
-    backendSigners.forEach((s, i) => {
-      console.log(`  ${i + 1}. ${s.publicKey.toBase58()}`);
-    });
-
-    // Add backend signatures MANUALLY instead of using partialSign
-    if (backendSigners.length > 0) {
-      try {
-        // DON'T recompile - use the existing serialized transaction to get the message
-        // Recompiling causes "unknown signer" errors
-        const txBuffer = Buffer.from(userSignedTxBase64, 'base64');
-        
-        // The message starts after the signature count (1 byte) and all signatures (64 bytes each)
-        const sigCount = txBuffer[0];
-        const messageStart = 1 + (sigCount * 64);
-        const messageBytes = txBuffer.slice(messageStart);
-        
-        console.log(`Transaction has ${sigCount} signature slots`);
-        console.log(`Message starts at byte ${messageStart}, length: ${messageBytes.length}`);
-        
-        // Hash the message to verify we're signing the right thing
-        const crypto = await import('crypto');
-        const messageHash = crypto.createHash('sha256').update(messageBytes).digest('hex');
-        console.log(`Message hash: ${messageHash.substring(0, 16)}...`);
-        
-        for (const signer of backendSigners) {
-          const signerPubkey = signer.publicKey.toBase58();
-          
-          // Sign the message
-          const signature = nacl.sign.detached(messageBytes, signer.secretKey);
-          console.log(`  ✅ Created signature for ${signerPubkey}`);
-          console.log(`  Signature (first 16 bytes): ${Buffer.from(signature).slice(0, 16).toString('hex')}`);
-          
-          // Find the signature slot for this signer
-          const sigIndex = userSignedTx.signatures.findIndex(s => 
-            s.publicKey.toBase58() === signerPubkey
-          );
-          
-          if (sigIndex >= 0) {
-            userSignedTx.signatures[sigIndex].signature = Buffer.from(signature);
-            console.log(`  ✅ Added signature at index ${sigIndex}`);
-          } else {
-            console.log(`  ⚠️ No signature slot found for ${signerPubkey}, adding new slot`);
-            userSignedTx.signatures.push({
-              signature: Buffer.from(signature),
-              publicKey: signer.publicKey
-            });
-          }
-        }
-        console.log('✅ Backend signatures added');
-      } catch (signError) {
-        console.error('❌ Error adding backend signatures:', signError.message);
-        throw signError;
-      }
-    } else {
-      console.log('⚠️ No backend signers found!');
-    }
-
-    // Log final signature state
-    const finalSigs = userSignedTx.signatures.map(s => ({
-      pubkey: s.publicKey.toBase58(),
-      hasSig: s.signature !== null
-    }));
-    console.log('Final signatures:', JSON.stringify(finalSigs, null, 2));
-
-    // Count signed vs unsigned
-    const signedCount = userSignedTx.signatures.filter(s => s.signature !== null).length;
-    const totalCount = userSignedTx.signatures.length;
-    console.log(`Signature status: ${signedCount}/${totalCount} signed`);
-
-    // CRITICAL FIX: Reconstruct transaction WITHOUT System Program in signers
-    // System Program should NEVER be a signer, but Phantom/Metaplex adds it
-    
-    const SYSTEM_PROGRAM = new PublicKey('11111111111111111111111111111111');
-    
-    // Create new transaction with same instructions
-    const cleanTx = new Transaction();
-    cleanTx.recentBlockhash = userSignedTx.recentBlockhash;
-    cleanTx.feePayer = userSignedTx.feePayer;
-    
-    // Copy all instructions
-    userSignedTx.instructions.forEach(ix => cleanTx.add(ix));
-    
-    // Manually set ONLY the valid signatures (user + backend), excluding System Program
-    cleanTx.signatures = userSignedTx.signatures.filter(s => 
-      s.signature !== null && !s.publicKey.equals(SYSTEM_PROGRAM)
-    );
-    
-    console.log(`Rebuilt transaction with ${cleanTx.signatures.length} signatures (removed System Program)`);
-    console.log('Clean signatures:', cleanTx.signatures.map(s => s.publicKey.toBase58()));
-
-    // Serialize the clean transaction
-    try {
-      const fullySigned = cleanTx.serialize({
-        requireAllSignatures: false,
-        verifySignatures: false
-      });
-      const fullySignedBase64 = fullySigned.toString('base64');
-      
-      console.log(`✅ Serialized clean transaction (${fullySigned.length} bytes)`);
-
-      // Clean up cache after successful signing
-      transactionCache.delete(cacheKey);
-      console.log(`Cleaned up cache for ${cacheKey}`);
-
-      res.json({
-        transaction: fullySignedBase64,
-        message: 'Transaction fully signed'
-      });
-    } catch (serializeError) {
-      console.error('Serialization error:', serializeError.message);
-      res.status(500).json({ error: 'Failed to serialize transaction: ' + serializeError.message });
-    }
-
-  } catch (error) {
-    console.error('Error in /mint/sign:', error);
-    res.status(500).json({ error: error.message, stack: error.stack });
-  }
-});
-
-// SIMPLE MINT - Let Metaplex handle everything (TEST ENDPOINT)
-app.post('/mint/simple', async (req, res) => {
+// Mint using Umi with MintV2
+app.post('/mint/umi', async (req, res) => {
   try {
     const { wallet } = req.body;
     if (!wallet) return res.status(400).json({ error: 'Wallet required' });
 
-    const walletPubkey = new PublicKey(wallet);
-
     const eligibility = await checkEligibility(wallet);
     if (!eligibility.eligible) {
       return res.status(403).json({ error: eligibility.reason });
     }
 
-    console.log(`Simple mint for ${wallet}...`);
+    console.log(`Minting for ${wallet} using Umi + MintV2...`);
 
-    const candyMachine = await metaplex.candyMachines().findByAddress({
-      address: CANDY_MACHINE_ID
-    });
+    // Fetch candy machine
+    const candyMachineAddress = publicKey(CANDY_MACHINE_ADDRESS);
+    const candyMachine = await fetchCandyMachine(umi, candyMachineAddress);
 
-    if (candyMachine.itemsRemaining.toNumber() === 0) {
+    console.log(`Candy Machine: ${candyMachine.itemsRedeemed}/${candyMachine.data.itemsAvailable} minted`);
+
+    if (candyMachine.itemsRedeemed >= candyMachine.data.itemsAvailable) {
       return res.status(400).json({ error: 'All NFTs minted' });
     }
 
-    // Let Metaplex do EVERYTHING - authority handles all signing
-    const { nft, response } = await metaplex.candyMachines().mint({
-      candyMachine,
-      owner: walletPubkey,
-      collectionUpdateAuthority: authorityKeypair.publicKey,
-    }).sendAndConfirm();
+    // Generate NFT mint signer
+    const nftMint = generateSigner(umi);
 
-    console.log('✅ Minted! Signature:', response.signature);
-    console.log(`View: https://solscan.io/tx/${response.signature}`);
+    // Convert wallet address to Umi public key
+    const ownerPublicKey = publicKey(wallet);
 
+    // Create mint instruction using MintV2
+    const mintIx = await mintV2(umi, {
+      candyMachine: candyMachineAddress,
+      nftMint,
+      collectionMint: candyMachine.collectionMint,
+      collectionUpdateAuthority: candyMachine.authority,
+      mintAuthority: authoritySigner,
+      payer: authoritySigner, // Backend pays for the mint
+      minter: ownerPublicKey, // NFT goes to user
+      group: some('default'), // Use default group
+    });
+
+    // Build and send transaction
+    const tx = await mintIx.sendAndConfirm(umi);
+
+    console.log('✅ Minted! Signature:', tx.signature);
+
+    // Convert signature to base58
+    const signatureBase58 = Buffer.from(tx.signature).toString('base64');
+    
     // Record the mint
     const minted = await loadMinted();
     if (!minted.includes(wallet)) {
@@ -417,111 +156,53 @@ app.post('/mint/simple', async (req, res) => {
 
     res.json({
       success: true,
-      signature: response.signature,
-      nft: nft.address.toBase58(),
-      solscan: `https://solscan.io/tx/${response.signature}`
+      signature: signatureBase58,
+      nft: nftMint.publicKey,
+      solscan: `https://solscan.io/tx/${signatureBase58}`
     });
 
   } catch (error) {
-    console.error('Simple mint error:', error);
-    res.status(500).json({ error: error.message, details: error.toString() });
+    console.error('Umi mint error:', error);
+    res.status(500).json({ 
+      error: error.message,
+      details: error.toString()
+    });
   }
 });
 
-// RPC proxy endpoint
+// RPC proxy
 app.post('/rpc', async (req, res) => {
   try {
-    const rpcRequest = req.body;
-
-    console.log(`RPC proxy: ${rpcRequest.method}`);
-
-    // Forward request to Solana RPC
     const response = await fetch(RPC_ENDPOINT, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(rpcRequest)
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
     });
-
-    const rpcResponse = await response.json();
-
-    // Log transaction signature for debugging
-    if (rpcRequest.method === 'sendTransaction') {
-      if (rpcResponse.result) {
-        console.log(`✅ Transaction sent! Signature: ${rpcResponse.result}`);
-        console.log(`View on Solscan: https://solscan.io/tx/${rpcResponse.result}`);
-      } else if (rpcResponse.error) {
-        console.log(`❌ Transaction failed:`, rpcResponse.error);
-      }
-    }
-
-    // Return raw response without modification
-    res.json(rpcResponse);
-
-  } catch (error) {
-    console.error('Error in /rpc:', error);
-    res.status(500).json({
-      jsonrpc: '2.0',
-      error: {
-        code: -32603,
-        message: error.message
-      },
-      id: req.body.id || null
-    });
-  }
-});
-
-// Confirm mint endpoint (optional - can be called after successful mint)
-app.post('/mint/confirm', async (req, res) => {
-  try {
-    const { wallet, signature } = req.body;
-
-    if (!wallet || !signature) {
-      return res.status(400).json({ error: 'Wallet and signature required' });
-    }
-
-    // Verify transaction was successful
-    const confirmation = await connection.getSignatureStatus(signature);
+    const data = await response.json();
     
-    if (confirmation.value?.confirmationStatus === 'confirmed' || 
-        confirmation.value?.confirmationStatus === 'finalized') {
-      
-      // Add wallet to minted list
-      const minted = await loadMinted();
-      if (!minted.includes(wallet)) {
-        minted.push(wallet);
-        await saveMinted(minted);
-        console.log(`✅ Wallet ${wallet} recorded as minted`);
+    if (req.body.method === 'sendTransaction') {
+      if (data.result) {
+        console.log(`✅ TX: https://solscan.io/tx/${data.result}`);
+      } else if (data.error) {
+        console.log(`❌ TX failed:`, data.error);
       }
-
-      res.json({ 
-        success: true, 
-        message: 'Mint confirmed and recorded',
-        signature 
-      });
-    } else {
-      res.status(400).json({ 
-        error: 'Transaction not confirmed',
-        status: confirmation.value?.confirmationStatus 
-      });
     }
-
+    
+    res.json(data);
   } catch (error) {
-    console.error('Error in /mint/confirm:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+app.get('/', (req, res) => {
+  res.json({
+    name: 'FUNDOSHI Mint Backend (Umi)',
+    endpoints: ['/mint/check', '/mint/umi', '/rpc'],
+    candyMachine: CANDY_MACHINE_ADDRESS
+  });
 });
 
-// Start server
 app.listen(PORT, () => {
-  console.log(`🚀 FUNDOSHI Mint Backend running on port ${PORT}`);
-  console.log(`Candy Machine: ${CANDY_MACHINE_ID.toBase58()}`);
-  console.log(`Authority: ${authorityKeypair.publicKey.toBase58()}`);
-  console.log(`RPC: ${RPC_ENDPOINT}`);
+  console.log(`🚀 Umi server running on port ${PORT}`);
+  console.log(`Candy Machine: ${CANDY_MACHINE_ADDRESS}`);
 });

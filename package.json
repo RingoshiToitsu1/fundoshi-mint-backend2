@@ -1,27 +1,19 @@
 {
   "name": "fundoshi-mint-backend",
   "version": "1.0.0",
-  "description": "FUNDOSHI NFT Mint Backend - Candy Machine v3",
+  "description": "FUNDOSHI NFT Mint Backend - Candy Machine v3 with Umi",
   "type": "module",
-  "main": "server.js",
+  "main": "server-umi.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node server-umi.js"
   },
-  "keywords": [
-    "solana",
-    "nft",
-    "candy-machine",
-    "fundoshi"
-  ],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "@metaplex-foundation/js": "^0.20.1",
+    "@metaplex-foundation/umi": "^0.9.2",
+    "@metaplex-foundation/umi-bundle-defaults": "^0.9.2",
+    "@metaplex-foundation/mpl-candy-machine": "^6.0.1",
     "@solana/web3.js": "^1.95.8",
     "cors": "^2.8.5",
-    "express": "^4.21.2",
-    "tweetnacl": "^1.0.3"
+    "express": "^4.21.2"
   },
   "engines": {
     "node": ">=20.0.0"
