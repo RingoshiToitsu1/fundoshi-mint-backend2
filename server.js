@@ -182,43 +182,44 @@ app.post('/mint', async (req, res) => {
       return res.status(400).json({ error: 'All NFTs have been minted' });
     }
 
-    // Build mint transaction
-    const mintBuilder = await metaplex.candyMachines().builders().mint({
+    // Get latest blockhash
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+
+    // Build mint instructions using Metaplex
+    const transactionBuilder = metaplex.candyMachines().builders().mint({
       candyMachine,
       collectionUpdateAuthority: authorityKeypair.publicKey,
       owner: walletPubkey,
     });
 
-    // Get blockhash
-    const { blockhash } = await connection.getLatestBlockhash('confirmed');
-
-    // Build the transaction using sendAndConfirm which returns a proper Transaction
-    const buildOutput = await mintBuilder.toTransaction({
-      blockhashWithExpiryBlockHeight: await connection.getLatestBlockhash('confirmed')
+    // Build the transaction with blockhash
+    const buildResult = await transactionBuilder.toTransaction({
+      blockhashWithExpiryBlockHeight: { blockhash, lastValidBlockHeight }
     });
 
-    // Extract transaction (buildOutput might have nested structure)
-    let transaction;
-    if (buildOutput.transaction) {
-      transaction = buildOutput.transaction;
-    } else {
-      // If toTransaction returns the transaction directly
-      const { signature, ...txData } = buildOutput;
-      transaction = new Transaction(txData);
-    }
-
-    // Set fee payer and recent blockhash
-    transaction.feePayer = walletPubkey;
+    // Create a new Transaction from the instructions
+    const transaction = new Transaction();
     transaction.recentBlockhash = blockhash;
+    transaction.feePayer = walletPubkey;
 
-    // Get all signers from the builder
-    const signers = mintBuilder.getSigners();
+    // Add all instructions from the builder
+    const instructions = transactionBuilder.getInstructions();
+    instructions.forEach(instruction => {
+      transaction.add(instruction);
+    });
+
+    // Get signers and partially sign (excluding the user's wallet)
+    const signers = transactionBuilder.getSigners();
+    console.log(`Found ${signers.length} signer(s)`);
     
-    // Partially sign with all required signers except the user
-    const signersToUse = signers.filter(s => !s.publicKey.equals(walletPubkey));
-    if (signersToUse.length > 0) {
-      transaction.partialSign(...signersToUse);
-      console.log(`✅ Transaction partially signed by ${signersToUse.length} signer(s)`);
+    // Filter out the user's wallet - they will sign on frontend
+    const backendSigners = signers.filter(signer => 
+      !signer.publicKey.equals(walletPubkey)
+    );
+
+    if (backendSigners.length > 0) {
+      console.log(`Backend signing with ${backendSigners.length} signer(s)`);
+      transaction.partialSign(...backendSigners);
     }
 
     // Serialize transaction for frontend
