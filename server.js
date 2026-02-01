@@ -186,15 +186,10 @@ app.post('/mint', async (req, res) => {
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
 
     // Build mint instructions using Metaplex
-    const transactionBuilder = metaplex.candyMachines().builders().mint({
+    const transactionBuilder = await metaplex.candyMachines().builders().mint({
       candyMachine,
       collectionUpdateAuthority: authorityKeypair.publicKey,
       owner: walletPubkey,
-    });
-
-    // Build the transaction with blockhash
-    const buildResult = await transactionBuilder.toTransaction({
-      blockhashWithExpiryBlockHeight: { blockhash, lastValidBlockHeight }
     });
 
     // Create a new Transaction from the instructions
