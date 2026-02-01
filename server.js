@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { promises as fs } from 'fs';
 import { Connection, PublicKey, Keypair } from '@solana/web3.js';
-import { Metaplex, keypairIdentity, bundlrStorage } from '@metaplex-foundation/js';
+import { Metaplex, keypairIdentity } from '@metaplex-foundation/js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,8 +24,7 @@ try {
 
 // Setup Metaplex with authority as identity
 const metaplex = Metaplex.make(connection)
-  .use(keypairIdentity(authorityKeypair))
-  .use(bundlrStorage());
+  .use(keypairIdentity(authorityKeypair));
 
 console.log('✅ Metaplex initialized for Candy Machine V2');
 
