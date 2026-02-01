@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 3000;
 
 // Configuration
 const CANDY_MACHINE_ID = new PublicKey('3pzu8qm6Hw65VH1khEtoU3ZPi8AtGn92oyjuUvVswArJ');
-const RPC_ENDPOINT = 'https://solana-mainnet.gateway.tatum.io';
+const RPC_ENDPOINT = process.env.RPC_ENDPOINT || 'https://solana-mainnet.gateway.tatum.io';
 const connection = new Connection(RPC_ENDPOINT, 'confirmed');
 
 // Load authority keypair from environment
