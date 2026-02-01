@@ -157,7 +157,7 @@ app.post('/mint/check', async (req, res) => {
   }
 });
 
-// Create mint transaction (unsigned - user will sign first)
+// Create mint transaction
 app.post('/mint', async (req, res) => {
   try {
     const { wallet } = req.body;
@@ -180,7 +180,7 @@ app.post('/mint', async (req, res) => {
       return res.status(403).json({ error: eligibility.reason });
     }
 
-    console.log(`Creating UNSIGNED mint transaction for ${wallet}`);
+    console.log(`Creating mint transaction for ${wallet}`);
 
     // Fetch Candy Machine
     const candyMachine = await metaplex.candyMachines().findByAddress({
@@ -198,84 +198,49 @@ app.post('/mint', async (req, res) => {
       return res.status(400).json({ error: 'All NFTs have been minted' });
     }
 
-    // Get latest blockhash
-    const { blockhash } = await connection.getLatestBlockhash('confirmed');
-
-    // Build mint instructions using Metaplex
-    const transactionBuilder = await metaplex.candyMachines().builders().mint({
+    // Build the mint transaction builder
+    const transactionBuilder = metaplex.candyMachines().builders().mint({
       candyMachine,
       collectionUpdateAuthority: authorityKeypair.publicKey,
       owner: walletPubkey,
     });
 
-    // Create a new Transaction from the instructions
-    const transaction = new Transaction();
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = walletPubkey;
+    // Get blockhash
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
-    // Add all instructions from the builder
-    const instructions = transactionBuilder.getInstructions();
-    instructions.forEach(instruction => {
-      transaction.add(instruction);
+    // Build and sign the complete transaction with ALL required signers
+    const builtTransaction = await transactionBuilder.toTransaction({
+      blockhashWithExpiryBlockHeight: await connection.getLatestBlockhash('confirmed')
     });
 
-    // Get signers from the builder (we'll store these for later)
-    const signers = transactionBuilder.getSigners();
+    // The transaction from toTransaction is already structured correctly
+    // Set the fee payer to the user
+    builtTransaction.feePayer = walletPubkey;
+    builtTransaction.recentBlockhash = blockhash;
+
+    // Sign with ALL backend signers (authority + ephemeral keys)
+    const allSigners = transactionBuilder.getSigners();
+    const backendSigners = allSigners.filter(s => !s.publicKey.equals(walletPubkey));
     
-    // Filter and deduplicate backend signers - STORE FULL KEYPAIRS
-    const backendSignersMap = new Map();
-    for (const signer of signers) {
-      if (!signer.publicKey.equals(walletPubkey)) {
-        const pubkeyStr = signer.publicKey.toBase58();
-        if (!backendSignersMap.has(pubkeyStr)) {
-          if (signer.secretKey) {
-            // Store the FULL signer object (Keypair), not just the public key
-            backendSignersMap.set(pubkeyStr, signer);
-          }
-        }
-      }
+    console.log(`Signing with ${backendSigners.length} backend signer(s)`);
+    
+    if (backendSigners.length > 0) {
+      builtTransaction.partialSign(...backendSigners);
     }
 
-    console.log(`Backend signers needed: ${backendSignersMap.size}`);
-    // Safe logging - handle different signer structures
-    const signerKeys = Array.from(backendSignersMap.values()).map(s => {
-      if (s.publicKey && typeof s.publicKey.toBase58 === 'function') {
-        return s.publicKey.toBase58();
-      } else if (typeof s.toBase58 === 'function') {
-        return s.toBase58();
-      } else {
-        return String(s);
-      }
-    });
-    console.log('Backend signer keys:', signerKeys);
-
-    // Store backend signers in cache for /mint/sign to use
-    const cacheKey = wallet;
-    transactionCache.set(cacheKey, {
-      signers: Array.from(backendSignersMap.values()), // Store full Keypair objects
-      timestamp: Date.now()
-    });
-    console.log(`Cached ${backendSignersMap.size} signer(s) for ${cacheKey}`);
-
-    // DON'T manually add signature slots - let the transaction compile naturally
-    // The transaction will figure out its own signers from the instructions
-    
-    console.log(`Transaction ready with ${transaction.instructions.length} instructions`);
-
-    // Send unsigned transaction
-    // Serialize UNSIGNED transaction for frontend
-    const serializedTransaction = transaction.serialize({
+    // Serialize for frontend
+    const serialized = builtTransaction.serialize({
       requireAllSignatures: false,
       verifySignatures: false
     });
 
-    const base64Transaction = serializedTransaction.toString('base64');
-    
-    console.log(`✅ UNSIGNED transaction created (${serializedTransaction.length} bytes)`);
+    const base64Transaction = serialized.toString('base64');
+
+    console.log(`✅ Transaction created (${serialized.length} bytes)`);
 
     res.json({
       transaction: base64Transaction,
-      message: 'Transaction ready for user signing'
+      message: 'Transaction ready for signing'
     });
 
   } catch (error) {
