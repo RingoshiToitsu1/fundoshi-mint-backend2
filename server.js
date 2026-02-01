@@ -406,29 +406,63 @@ app.post('/mint/sign', async (req, res) => {
     const totalCount = userSignedTx.signatures.length;
     console.log(`Signature status: ${signedCount}/${totalCount} signed`);
 
-    // Serialize the transaction properly
-    // Filter out any null signatures before serializing
-    const validSignatures = userSignedTx.signatures.filter(s => s.signature !== null);
-    
-    // Create a clean transaction with only the valid signatures
-    const cleanTx = Transaction.populate(userSignedTx.compileMessage(), validSignatures);
-    
-    const fullySigned = cleanTx.serialize({
-      requireAllSignatures: false,
-      verifySignatures: false
-    });
-    const fullySignedBase64 = fullySigned.toString('base64');
-    
-    console.log(`✅ Properly serialized transaction (${fullySigned.length} bytes)`);
+    // Serialize with all signatures including nulls
+    // Use the existing transaction serialize method which handles this correctly
+    try {
+      const fullySigned = userSignedTx.serialize({
+        requireAllSignatures: false,
+        verifySignatures: false
+      });
+      const fullySignedBase64 = fullySigned.toString('base64');
+      
+      console.log(`✅ Serialized transaction (${fullySigned.length} bytes)`);
 
-    // Clean up cache after successful signing
-    transactionCache.delete(cacheKey);
-    console.log(`Cleaned up cache for ${cacheKey}`);
+      // Clean up cache after successful signing
+      transactionCache.delete(cacheKey);
+      console.log(`Cleaned up cache for ${cacheKey}`);
 
-    res.json({
-      transaction: fullySignedBase64,
-      message: 'Transaction fully signed'
-    });
+      res.json({
+        transaction: fullySignedBase64,
+        message: 'Transaction fully signed'
+      });
+    } catch (serializeError) {
+      console.error('Serialization error:', serializeError.message);
+      // If serialize fails, try manual construction
+      const originalTxBuffer = Buffer.from(userSignedTxBase64, 'base64');
+      const sigCount = userSignedTx.signatures.length;
+      
+      // Calculate message start (1 byte sig count + sigCount * 64 bytes per sig)
+      const messageStart = 1 + (sigCount * 64);
+      const messageBytes = originalTxBuffer.slice(messageStart);
+      
+      // Build new buffer
+      const newBuffer = Buffer.alloc(messageStart + messageBytes.length);
+      newBuffer.writeUInt8(sigCount, 0);
+      
+      // Write signatures
+      let offset = 1;
+      for (const sig of userSignedTx.signatures) {
+        if (sig.signature) {
+          sig.signature.copy(newBuffer, offset);
+        } else {
+          newBuffer.fill(0, offset, offset + 64);
+        }
+        offset += 64;
+      }
+      
+      // Copy message
+      messageBytes.copy(newBuffer, offset);
+      
+      const fullySignedBase64 = newBuffer.toString('base64');
+      console.log(`✅ Manually serialized transaction (${newBuffer.length} bytes)`);
+      
+      transactionCache.delete(cacheKey);
+      
+      res.json({
+        transaction: fullySignedBase64,
+        message: 'Transaction fully signed'
+      });
+    }
 
   } catch (error) {
     console.error('Error in /mint/sign:', error);
