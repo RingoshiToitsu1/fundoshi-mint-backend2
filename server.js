@@ -262,8 +262,9 @@ app.post('/mint', async (req, res) => {
     const message = transaction.compileMessage();
     
     // Add any backend signers that aren't already in the signature array
-    for (const [pubkeyStr, pubkey] of backendSignersMap) {
-      const alreadyInSigs = transaction.signatures.some(s => s.publicKey.equals(pubkey));
+    for (const [pubkeyStr, signer] of backendSignersMap) {
+      const pubkey = signer.publicKey;
+      const alreadyInSigs = transaction.signatures.some(s => s.publicKey && s.publicKey.equals(pubkey));
       if (!alreadyInSigs) {
         transaction.signatures.push({
           signature: null,
@@ -273,10 +274,7 @@ app.post('/mint', async (req, res) => {
       }
     }
 
-    console.log('Transaction signature slots:', transaction.signatures.map(s => ({
-      pubkey: s.publicKey ? s.publicKey.toBase58() : 'null',
-      isFeePayer: s.publicKey ? s.publicKey.equals(walletPubkey) : false
-    })));
+    console.log(`Transaction has ${transaction.signatures.length} signature slots`);
 
     // DO NOT sign here - send unsigned transaction
     // Serialize UNSIGNED transaction for frontend
