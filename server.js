@@ -237,10 +237,25 @@ app.post('/mint', async (req, res) => {
       console.log(`  ${i + 1}. ${s.publicKey.toBase58()}`);
     });
 
+    // Sign the transaction
     if (backendSigners.length > 0) {
       try {
         transaction.partialSign(...backendSigners);
-        console.log('✅ Transaction partially signed by backend');
+        console.log('✅ Transaction signed by backend');
+        
+        // Log the signature structure
+        const sigDetails = transaction.signatures.map(s => ({
+          pubkey: s.publicKey.toBase58(),
+          hasSig: s.signature !== null,
+          isFeePayer: s.publicKey.equals(walletPubkey)
+        }));
+        console.log('Signature structure:', JSON.stringify(sigDetails, null, 2));
+        
+        // Count how many signatures are present
+        const signedCount = transaction.signatures.filter(s => s.signature !== null).length;
+        const totalCount = transaction.signatures.length;
+        console.log(`Signatures: ${signedCount}/${totalCount} signed`);
+        
       } catch (signError) {
         console.error('Error signing transaction:', signError);
         throw signError;
