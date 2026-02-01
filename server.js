@@ -98,6 +98,69 @@ app.post('/mint/check', async (req, res) => {
   }
 });
 
+// Mint using Umi with MintV2 - NO GUARD
+app.post('/mint/noguard', async (req, res) => {
+  try {
+    const { wallet } = req.body;
+    if (!wallet) return res.status(400).json({ error: 'Wallet required' });
+
+    const eligibility = await checkEligibility(wallet);
+    if (!eligibility.eligible) {
+      return res.status(403).json({ error: eligibility.reason });
+    }
+
+    console.log(`Minting for ${wallet} WITHOUT guard...`);
+
+    const candyMachineAddress = publicKey(CANDY_MACHINE_ADDRESS);
+    const candyMachine = await fetchCandyMachine(umi, candyMachineAddress);
+
+    console.log(`CM: ${candyMachine.itemsRedeemed}/${candyMachine.data.itemsAvailable}`);
+
+    if (candyMachine.itemsRedeemed >= candyMachine.data.itemsAvailable) {
+      return res.status(400).json({ error: 'All NFTs minted' });
+    }
+
+    const nftMint = generateSigner(umi);
+    const ownerPublicKey = publicKey(wallet);
+
+    // Try minting WITHOUT specifying candy guard at all
+    const mintIx = await mintV2(umi, {
+      candyMachine: candyMachineAddress,
+      nftMint,
+      collectionMint: candyMachine.collectionMint,
+      collectionUpdateAuthority: candyMachine.authority,
+      payer: authoritySigner,
+      minter: ownerPublicKey,
+      // NO candyGuard parameter
+      // NO group parameter
+    });
+
+    const tx = await mintIx.sendAndConfirm(umi);
+    console.log('✅ Minted!', Buffer.from(tx.signature).toString('base64'));
+
+    const minted = await loadMinted();
+    if (!minted.includes(wallet)) {
+      minted.push(wallet);
+      await saveMinted(minted);
+    }
+
+    const sig = Buffer.from(tx.signature).toString('base64');
+    res.json({
+      success: true,
+      signature: sig,
+      nft: nftMint.publicKey,
+      solscan: `https://solscan.io/tx/${sig}`
+    });
+
+  } catch (error) {
+    console.error('No-guard mint error:', error);
+    res.status(500).json({ 
+      error: error.message,
+      hint: 'Your Candy Machine may be misconfigured. Check mintAuthority on Solscan.'
+    });
+  }
+});
+
 // Mint using Umi with MintV2
 app.post('/mint/umi', async (req, res) => {
   try {
@@ -116,6 +179,7 @@ app.post('/mint/umi', async (req, res) => {
     const candyMachine = await fetchCandyMachine(umi, candyMachineAddress);
 
     console.log(`Candy Machine: ${candyMachine.itemsRedeemed}/${candyMachine.data.itemsAvailable} minted`);
+    console.log(`Candy Guard:`, candyMachine.mintAuthority);
 
     if (candyMachine.itemsRedeemed >= candyMachine.data.itemsAvailable) {
       return res.status(400).json({ error: 'All NFTs minted' });
@@ -127,17 +191,26 @@ app.post('/mint/umi', async (req, res) => {
     // Convert wallet address to Umi public key
     const ownerPublicKey = publicKey(wallet);
 
-    // Create mint instruction using MintV2
-    const mintIx = await mintV2(umi, {
+    // Build mint instruction
+    // Check if candy machine has a guard
+    const mintArgs = {
       candyMachine: candyMachineAddress,
       nftMint,
       collectionMint: candyMachine.collectionMint,
       collectionUpdateAuthority: candyMachine.authority,
-      mintAuthority: authoritySigner,
-      payer: authoritySigner, // Backend pays for the mint
-      minter: ownerPublicKey, // NFT goes to user
-      group: some('default'), // Use default group
-    });
+      payer: authoritySigner,
+      minter: ownerPublicKey,
+    };
+
+    // Add candy guard if it exists
+    if (candyMachine.mintAuthority && candyMachine.mintAuthority.__option === 'Some') {
+      mintArgs.candyGuard = candyMachine.mintAuthority.value;
+      mintArgs.group = some('default');
+      console.log('Using candy guard:', candyMachine.mintAuthority.value);
+    }
+
+    // Create mint instruction using MintV2
+    const mintIx = await mintV2(umi, mintArgs);
 
     // Build and send transaction
     const tx = await mintIx.sendAndConfirm(umi);
