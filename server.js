@@ -237,7 +237,17 @@ app.post('/mint', async (req, res) => {
     }
 
     console.log(`Backend signers needed: ${backendSignersMap.size}`);
-    console.log('Backend signer keys:', Array.from(backendSignersMap.values()).map(s => s.publicKey.toBase58()));
+    // Safe logging - handle different signer structures
+    const signerKeys = Array.from(backendSignersMap.values()).map(s => {
+      if (s.publicKey && typeof s.publicKey.toBase58 === 'function') {
+        return s.publicKey.toBase58();
+      } else if (typeof s.toBase58 === 'function') {
+        return s.toBase58();
+      } else {
+        return String(s);
+      }
+    });
+    console.log('Backend signer keys:', signerKeys);
 
     // Store backend signers in cache for /mint/sign to use
     const cacheKey = wallet;
@@ -313,6 +323,16 @@ app.post('/mint/sign', async (req, res) => {
 
     const backendSigners = cachedData.signers;
     console.log(`Retrieved ${backendSigners.length} cached signer(s) for ${cacheKey}`);
+    
+    // Debug: Check structure of cached signers
+    backendSigners.forEach((s, i) => {
+      console.log(`Cached signer ${i}:`, {
+        type: s.constructor?.name,
+        hasPublicKey: !!s.publicKey,
+        hasSecretKey: !!s.secretKey,
+        publicKeyType: s.publicKey?.constructor?.name
+      });
+    });
 
     // Deserialize user-signed transaction
     const userSignedTx = Transaction.from(Buffer.from(userSignedTxBase64, 'base64'));
