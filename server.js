@@ -222,29 +222,30 @@ app.post('/mint', async (req, res) => {
     // Get signers from the builder (we'll store these for later)
     const signers = transactionBuilder.getSigners();
     
-    // Filter and deduplicate backend signers
+    // Filter and deduplicate backend signers - STORE FULL KEYPAIRS
     const backendSignersMap = new Map();
     for (const signer of signers) {
       if (!signer.publicKey.equals(walletPubkey)) {
         const pubkeyStr = signer.publicKey.toBase58();
         if (!backendSignersMap.has(pubkeyStr)) {
           if (signer.secretKey) {
-            backendSignersMap.set(pubkeyStr, signer.publicKey);
+            // Store the FULL signer object (Keypair), not just the public key
+            backendSignersMap.set(pubkeyStr, signer);
           }
         }
       }
     }
 
     console.log(`Backend signers needed: ${backendSignersMap.size}`);
-    console.log('Backend signer keys:', Array.from(backendSignersMap.values()).map(pk => pk.toBase58()));
+    console.log('Backend signer keys:', Array.from(backendSignersMap.values()).map(s => s.publicKey.toBase58()));
 
     // Store backend signers in cache for /mint/sign to use
     const cacheKey = wallet;
     transactionCache.set(cacheKey, {
-      signers: Array.from(backendSignersMap.values()),
+      signers: Array.from(backendSignersMap.values()), // Store full Keypair objects
       timestamp: Date.now()
     });
-    console.log(`Cached signers for ${cacheKey}`);
+    console.log(`Cached ${backendSignersMap.size} signer(s) for ${cacheKey}`);
 
     // IMPORTANT: Compile the message to set up signature slots for ALL required signers
     // This ensures backend signers have slots even though we don't sign yet
