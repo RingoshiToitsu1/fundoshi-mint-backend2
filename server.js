@@ -466,6 +466,16 @@ app.post('/rpc', async (req, res) => {
 
     const rpcResponse = await response.json();
 
+    // Log transaction signature for debugging
+    if (rpcRequest.method === 'sendTransaction') {
+      if (rpcResponse.result) {
+        console.log(`✅ Transaction sent! Signature: ${rpcResponse.result}`);
+        console.log(`View on Solscan: https://solscan.io/tx/${rpcResponse.result}`);
+      } else if (rpcResponse.error) {
+        console.log(`❌ Transaction failed:`, rpcResponse.error);
+      }
+    }
+
     // Return raw response without modification
     res.json(rpcResponse);
 
