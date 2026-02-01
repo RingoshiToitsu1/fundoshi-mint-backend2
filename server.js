@@ -208,28 +208,31 @@ app.post('/mint', async (req, res) => {
     // Get blockhash
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
-    // Build and sign the complete transaction with ALL required signers
-    const builtTransaction = await transactionBuilder.toTransaction({
-      blockhashWithExpiryBlockHeight: await connection.getLatestBlockhash('confirmed')
-    });
+    // Create transaction from builder instructions
+    const transaction = new Transaction();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = walletPubkey;
 
-    // The transaction from toTransaction is already structured correctly
-    // Set the fee payer to the user
-    builtTransaction.feePayer = walletPubkey;
-    builtTransaction.recentBlockhash = blockhash;
+    // Add all instructions
+    const instructions = transactionBuilder.getInstructions();
+    instructions.forEach(ix => transaction.add(ix));
 
-    // Sign with ALL backend signers (authority + ephemeral keys)
+    // Get ALL signers (backend keypairs)
     const allSigners = transactionBuilder.getSigners();
     const backendSigners = allSigners.filter(s => !s.publicKey.equals(walletPubkey));
     
     console.log(`Signing with ${backendSigners.length} backend signer(s)`);
+    backendSigners.forEach((s, i) => {
+      console.log(`  ${i + 1}. ${s.publicKey.toBase58()}`);
+    });
     
     if (backendSigners.length > 0) {
-      builtTransaction.partialSign(...backendSigners);
+      transaction.partialSign(...backendSigners);
+      console.log('✅ Backend signatures added');
     }
 
     // Serialize for frontend
-    const serialized = builtTransaction.serialize({
+    const serialized = transaction.serialize({
       requireAllSignatures: false,
       verifySignatures: false
     });
