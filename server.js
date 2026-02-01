@@ -362,12 +362,18 @@ app.post('/mint/sign', async (req, res) => {
         console.log(`Transaction has ${sigCount} signature slots`);
         console.log(`Message starts at byte ${messageStart}, length: ${messageBytes.length}`);
         
+        // Hash the message to verify we're signing the right thing
+        const crypto = await import('crypto');
+        const messageHash = crypto.createHash('sha256').update(messageBytes).digest('hex');
+        console.log(`Message hash: ${messageHash.substring(0, 16)}...`);
+        
         for (const signer of backendSigners) {
           const signerPubkey = signer.publicKey.toBase58();
           
           // Sign the message
           const signature = nacl.sign.detached(messageBytes, signer.secretKey);
           console.log(`  ✅ Created signature for ${signerPubkey}`);
+          console.log(`  Signature (first 16 bytes): ${Buffer.from(signature).slice(0, 16).toString('hex')}`);
           
           // Find the signature slot for this signer
           const sigIndex = userSignedTx.signatures.findIndex(s => 
@@ -406,23 +412,10 @@ app.post('/mint/sign', async (req, res) => {
     const totalCount = userSignedTx.signatures.length;
     console.log(`Signature status: ${signedCount}/${totalCount} signed`);
 
-    // CRITICAL FIX: Remove System Program and other non-signer accounts from signatures
-    // System Program (11111111111111111111111111111111) should NEVER be a signer
-    const SYSTEM_PROGRAM = '11111111111111111111111111111111';
+    // DON'T filter signatures - Solana will handle null signatures for non-signer accounts
+    // The message format requires all accounts in signatures array even if not all sign
     
-    // Filter out non-signers (accounts without signatures)
-    const cleanedSignatures = userSignedTx.signatures.filter(s => {
-      const pubkey = s.publicKey.toBase58();
-      // Keep only signatures that are actually signed OR are valid signers waiting for signature
-      return s.signature !== null && pubkey !== SYSTEM_PROGRAM;
-    });
-    
-    console.log(`Cleaned signatures: ${cleanedSignatures.length} (removed ${totalCount - cleanedSignatures.length})`);
-    
-    // Rebuild transaction with only valid signatures
-    userSignedTx.signatures = cleanedSignatures;
-
-    // Serialize with cleaned signatures
+    // Serialize with all signatures (including nulls for non-signers)
     try {
       const fullySigned = userSignedTx.serialize({
         requireAllSignatures: false,
@@ -430,7 +423,7 @@ app.post('/mint/sign', async (req, res) => {
       });
       const fullySignedBase64 = fullySigned.toString('base64');
       
-      console.log(`✅ Serialized transaction (${fullySigned.length} bytes)`);
+      console.log(`✅ Serialized transaction (${fullySigned.length} bytes) with ${signedCount} signatures`);
 
       // Clean up cache after successful signing
       transactionCache.delete(cacheKey);
