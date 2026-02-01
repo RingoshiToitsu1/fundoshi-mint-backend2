@@ -29,6 +29,27 @@ async function setupAuthority() {
     await fs.writeFile('./authority.json', JSON.stringify(keyArray, null, 2));
     console.log('✅ authority.json created from environment variable');
   }
+  
+  // Create Solana config directory and file
+  const solanaConfigDir = process.env.HOME + '/.config/solana';
+  const solanaConfigPath = solanaConfigDir + '/cli/config.yml';
+  
+  try {
+    await fs.mkdir(solanaConfigDir + '/cli', { recursive: true });
+    
+    const rpcUrl = process.env.RPC_ENDPOINT || 'https://mainnet.helius-rpc.com/?api-key=0267bb20-16b0-42e9-a5f0-c0c0f0858502';
+    const configContent = `json_rpc_url: "${rpcUrl}"
+websocket_url: ""
+keypair_path: ${process.cwd()}/authority.json
+address_labels:
+  "11111111111111111111111111111111": System Program
+commitment: confirmed`;
+    
+    await fs.writeFile(solanaConfigPath, configContent);
+    console.log('✅ Solana config file created');
+  } catch (error) {
+    console.error('Warning: Could not create Solana config:', error.message);
+  }
 }
 
 // Initialize on startup
