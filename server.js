@@ -213,14 +213,35 @@ app.post('/mint', async (req, res) => {
         const pubkeyStr = signer.publicKey.toBase58();
         if (!backendSignersMap.has(pubkeyStr)) {
           if (signer.secretKey) {
-            backendSignersMap.set(pubkeyStr, signer.publicKey.toBase58());
+            backendSignersMap.set(pubkeyStr, signer.publicKey);
           }
         }
       }
     }
 
     console.log(`Backend signers needed: ${backendSignersMap.size}`);
-    console.log('Backend signer keys:', Array.from(backendSignersMap.values()));
+    console.log('Backend signer keys:', Array.from(backendSignersMap.values()).map(pk => pk.toBase58()));
+
+    // IMPORTANT: Compile the message to set up signature slots for ALL required signers
+    // This ensures backend signers have slots even though we don't sign yet
+    const message = transaction.compileMessage();
+    
+    // Add any backend signers that aren't already in the signature array
+    for (const [pubkeyStr, pubkey] of backendSignersMap) {
+      const alreadyInSigs = transaction.signatures.some(s => s.publicKey.equals(pubkey));
+      if (!alreadyInSigs) {
+        transaction.signatures.push({
+          signature: null,
+          publicKey: pubkey
+        });
+        console.log(`Added signature slot for backend signer: ${pubkeyStr}`);
+      }
+    }
+
+    console.log('Transaction signature slots:', transaction.signatures.map(s => ({
+      pubkey: s.publicKey.toBase58(),
+      isFeePayer: s.publicKey.equals(walletPubkey)
+    })));
 
     // DO NOT sign here - send unsigned transaction
     // Serialize UNSIGNED transaction for frontend
