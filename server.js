@@ -141,7 +141,7 @@ app.post('/mint/check', async (req, res) => {
   }
 });
 
-// Create mint transaction
+// Create mint transaction (unsigned - user will sign first)
 app.post('/mint', async (req, res) => {
   try {
     const { wallet } = req.body;
@@ -164,7 +164,7 @@ app.post('/mint', async (req, res) => {
       return res.status(403).json({ error: eligibility.reason });
     }
 
-    console.log(`Creating mint transaction for ${wallet}`);
+    console.log(`Creating UNSIGNED mint transaction for ${wallet}`);
 
     // Fetch Candy Machine
     const candyMachine = await metaplex.candyMachines().findByAddress({
@@ -183,7 +183,7 @@ app.post('/mint', async (req, res) => {
     }
 
     // Get latest blockhash
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
     // Build mint instructions using Metaplex
     const transactionBuilder = await metaplex.candyMachines().builders().mint({
@@ -203,93 +203,27 @@ app.post('/mint', async (req, res) => {
       transaction.add(instruction);
     });
 
-    // Get signers from the builder
+    // Get signers from the builder (we'll store these for later)
     const signers = transactionBuilder.getSigners();
-    console.log(`Found ${signers.length} total signer(s) from builder`);
     
-    // Filter to only backend signers (not the user wallet)
-    // Also convert Metaplex signers to standard Keypair if needed
-    const backendSignersMap = new Map(); // Use Map to deduplicate by public key
-    
+    // Filter and deduplicate backend signers
+    const backendSignersMap = new Map();
     for (const signer of signers) {
       if (!signer.publicKey.equals(walletPubkey)) {
         const pubkeyStr = signer.publicKey.toBase58();
-        
-        // Only add if we haven't seen this public key yet
         if (!backendSignersMap.has(pubkeyStr)) {
-          // Check if this is a standard Keypair or needs conversion
           if (signer.secretKey) {
-            // It's already a Keypair-like object with secretKey
-            backendSignersMap.set(pubkeyStr, signer);
-          } else if (signer._keypair) {
-            // Metaplex might wrap it
-            backendSignersMap.set(pubkeyStr, signer._keypair);
+            backendSignersMap.set(pubkeyStr, signer.publicKey.toBase58());
           }
         }
       }
     }
 
-    const backendSigners = Array.from(backendSignersMap.values());
+    console.log(`Backend signers needed: ${backendSignersMap.size}`);
+    console.log('Backend signer keys:', Array.from(backendSignersMap.values()));
 
-    console.log(`User wallet (feePayer): ${walletPubkey.toBase58()}`);
-    console.log(`Backend will sign with ${backendSigners.length} unique signer(s):`);
-    backendSigners.forEach((s, i) => {
-      console.log(`  ${i + 1}. ${s.publicKey.toBase58()}`);
-    });
-
-    // Sign the transaction
-    if (backendSigners.length > 0) {
-      try {
-        transaction.partialSign(...backendSigners);
-        console.log('✅ Transaction signed by backend');
-        
-        // Log the signature structure
-        const sigDetails = transaction.signatures.map(s => ({
-          pubkey: s.publicKey.toBase58(),
-          hasSig: s.signature !== null,
-          isFeePayer: s.publicKey.equals(walletPubkey)
-        }));
-        console.log('Signature structure:', JSON.stringify(sigDetails, null, 2));
-        
-        // Count how many signatures are present
-        const signedCount = transaction.signatures.filter(s => s.signature !== null).length;
-        const totalCount = transaction.signatures.length;
-        console.log(`Signatures: ${signedCount}/${totalCount} signed`);
-        
-      } catch (signError) {
-        console.error('Error signing transaction:', signError);
-        throw signError;
-      }
-    } else {
-      console.log('⚠️ No backend signers found - user will sign entire transaction');
-    }
-
-    // Log transaction info before serialization
-    console.log('Transaction details:');
-    console.log(`  Instructions: ${transaction.instructions.length}`);
-    console.log(`  Signatures: ${transaction.signatures.length}`);
-    
-    // Test: Serialize and deserialize to verify it works
-    try {
-      const testSerialized = transaction.serialize({
-        requireAllSignatures: false,
-        verifySignatures: false
-      });
-      console.log(`  Test serialization: ${testSerialized.length} bytes - OK`);
-      
-      // Test deserialize
-      const testTx = Transaction.from(testSerialized);
-      console.log(`  Test deserialization: ${testTx.signatures.length} signatures - OK`);
-      console.log('  Deserialized signatures:', testTx.signatures.map(s => ({
-        pubkey: s.publicKey.toBase58(),
-        hasSig: s.signature !== null
-      })));
-    } catch (testError) {
-      console.error('  Test serialization failed:', testError.message);
-    }
-    
-    // Serialize transaction for frontend
-    // Use requireAllSignatures: false to allow frontend to add user signature
+    // DO NOT sign here - send unsigned transaction
+    // Serialize UNSIGNED transaction for frontend
     const serializedTransaction = transaction.serialize({
       requireAllSignatures: false,
       verifySignatures: false
@@ -297,17 +231,92 @@ app.post('/mint', async (req, res) => {
 
     const base64Transaction = serializedTransaction.toString('base64');
     
-    console.log(`  Final serialized size: ${serializedTransaction.length} bytes`);
-    console.log(`✅ Mint transaction created for ${wallet}`);
+    console.log(`✅ UNSIGNED transaction created (${serializedTransaction.length} bytes)`);
 
     res.json({
       transaction: base64Transaction,
-      message: 'Transaction ready for signing'
+      message: 'Transaction ready for user signing'
     });
 
   } catch (error) {
     console.error('Error in /mint:', error);
     res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
+// Sign transaction after user has signed
+app.post('/mint/sign', async (req, res) => {
+  try {
+    const { wallet, transaction: userSignedTxBase64 } = req.body;
+
+    if (!wallet || !userSignedTxBase64) {
+      return res.status(400).json({ error: 'Wallet and transaction required' });
+    }
+
+    console.log(`Adding backend signatures for ${wallet}`);
+
+    // Deserialize user-signed transaction
+    const userSignedTx = Transaction.from(Buffer.from(userSignedTxBase64, 'base64'));
+    
+    console.log('User-signed transaction received');
+    console.log('Signatures:', userSignedTx.signatures.map(s => ({
+      pubkey: s.publicKey.toBase58(),
+      hasSig: s.signature !== null
+    })));
+
+    // Fetch Candy Machine to get signers again
+    const candyMachine = await metaplex.candyMachines().findByAddress({
+      address: CANDY_MACHINE_ID
+    });
+
+    const walletPubkey = new PublicKey(wallet);
+    
+    // Build to get signers
+    const transactionBuilder = await metaplex.candyMachines().builders().mint({
+      candyMachine,
+      collectionUpdateAuthority: authorityKeypair.publicKey,
+      owner: walletPubkey,
+    });
+
+    const signers = transactionBuilder.getSigners();
+    
+    // Get backend signers
+    const backendSignersMap = new Map();
+    for (const signer of signers) {
+      if (!signer.publicKey.equals(walletPubkey)) {
+        const pubkeyStr = signer.publicKey.toBase58();
+        if (!backendSignersMap.has(pubkeyStr) && signer.secretKey) {
+          backendSignersMap.set(pubkeyStr, signer);
+        }
+      }
+    }
+
+    const backendSigners = Array.from(backendSignersMap.values());
+    console.log(`Adding ${backendSigners.length} backend signature(s)`);
+
+    // Add backend signatures
+    if (backendSigners.length > 0) {
+      userSignedTx.partialSign(...backendSigners);
+      console.log('✅ Backend signatures added');
+    }
+
+    // Serialize fully signed transaction
+    const fullySigned = userSignedTx.serialize();
+    const fullySignedBase64 = fullySigned.toString('base64');
+
+    console.log('Fully signed transaction:', userSignedTx.signatures.map(s => ({
+      pubkey: s.publicKey.toBase58(),
+      hasSig: s.signature !== null
+    })));
+
+    res.json({
+      transaction: fullySignedBase64,
+      message: 'Transaction fully signed'
+    });
+
+  } catch (error) {
+    console.error('Error in /mint/sign:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
