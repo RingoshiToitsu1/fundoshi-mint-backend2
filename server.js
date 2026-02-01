@@ -382,14 +382,37 @@ app.post('/mint/sign', async (req, res) => {
     const totalCount = userSignedTx.signatures.length;
     console.log(`Signature status: ${signedCount}/${totalCount} signed`);
 
-    // Serialize fully signed transaction
-    const fullySigned = userSignedTx.serialize({
-      requireAllSignatures: false,
-      verifySignatures: false
-    });
-    const fullySignedBase64 = fullySigned.toString('base64');
-
-    console.log(`✅ Fully signed transaction (${fullySigned.length} bytes)`);
+    // MANUALLY serialize the transaction to avoid compileMessage() validation
+    // Don't use transaction.serialize() as it will try to recompile and validate signers
+    
+    // Start with the original transaction buffer
+    const originalTxBuffer = Buffer.from(userSignedTxBase64, 'base64');
+    
+    // Build new transaction with updated signatures
+    const sigCount = userSignedTx.signatures.length;
+    const newTxBuffer = Buffer.alloc(1 + (sigCount * 64) + (originalTxBuffer.length - 193)); // 193 was the message start
+    
+    // Write signature count
+    newTxBuffer.writeUInt8(sigCount, 0);
+    
+    // Write all signatures
+    let offset = 1;
+    for (const sig of userSignedTx.signatures) {
+      if (sig.signature) {
+        sig.signature.copy(newTxBuffer, offset);
+      } else {
+        // Write null signature (64 zeros)
+        newTxBuffer.fill(0, offset, offset + 64);
+      }
+      offset += 64;
+    }
+    
+    // Copy the message part from original transaction (starts at byte 193)
+    originalTxBuffer.copy(newTxBuffer, offset, 193);
+    
+    const fullySignedBase64 = newTxBuffer.toString('base64');
+    
+    console.log(`✅ Manually serialized transaction (${newTxBuffer.length} bytes)`);
 
     res.json({
       transaction: fullySignedBase64,
