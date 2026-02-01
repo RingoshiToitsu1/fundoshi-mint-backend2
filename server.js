@@ -257,26 +257,12 @@ app.post('/mint', async (req, res) => {
     });
     console.log(`Cached ${backendSignersMap.size} signer(s) for ${cacheKey}`);
 
-    // IMPORTANT: Compile the message to set up signature slots for ALL required signers
-    // This ensures backend signers have slots even though we don't sign yet
-    const message = transaction.compileMessage();
+    // DON'T manually add signature slots - let the transaction compile naturally
+    // The transaction will figure out its own signers from the instructions
     
-    // Add any backend signers that aren't already in the signature array
-    for (const [pubkeyStr, signer] of backendSignersMap) {
-      const pubkey = signer.publicKey;
-      const alreadyInSigs = transaction.signatures.some(s => s.publicKey && s.publicKey.equals(pubkey));
-      if (!alreadyInSigs) {
-        transaction.signatures.push({
-          signature: null,
-          publicKey: pubkey
-        });
-        console.log(`Added signature slot for backend signer: ${pubkeyStr}`);
-      }
-    }
+    console.log(`Transaction ready with ${transaction.instructions.length} instructions`);
 
-    console.log(`Transaction has ${transaction.signatures.length} signature slots`);
-
-    // DO NOT sign here - send unsigned transaction
+    // Send unsigned transaction
     // Serialize UNSIGNED transaction for frontend
     const serializedTransaction = transaction.serialize({
       requireAllSignatures: false,
