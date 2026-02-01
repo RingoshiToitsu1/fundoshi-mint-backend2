@@ -198,8 +198,9 @@ app.post('/mint', async (req, res) => {
       return res.status(400).json({ error: 'All NFTs have been minted' });
     }
 
-    // Build the mint transaction builder
-    const transactionBuilder = metaplex.candyMachines().builders().mint({
+    // Build the mint transaction using Metaplex
+    // The builder pattern in Metaplex JS SDK works differently
+    const mintBuilder = await metaplex.candyMachines().builders().mint({
       candyMachine,
       collectionUpdateAuthority: authorityKeypair.publicKey,
       owner: walletPubkey,
@@ -208,23 +209,22 @@ app.post('/mint', async (req, res) => {
     // Get blockhash
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
-    // Create transaction from builder instructions
-    const transaction = new Transaction();
+    // The builder has the transaction and signers built in
+    // We need to extract them properly
+    const context = mintBuilder.getContext();
+    
+    console.log('Builder context:', Object.keys(context));
+
+    // Get the transaction and signers from context
+    const transaction = context.transaction || new Transaction();
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = walletPubkey;
 
-    // Add all instructions
-    const instructions = transactionBuilder.getInstructions();
-    instructions.forEach(ix => transaction.add(ix));
-
-    // Get ALL signers (backend keypairs)
-    const allSigners = transactionBuilder.getSigners();
-    const backendSigners = allSigners.filter(s => !s.publicKey.equals(walletPubkey));
+    // Get signers - they should be in the context
+    const signers = context.signers || [];
+    const backendSigners = signers.filter(s => !s.publicKey.equals(walletPubkey));
     
-    console.log(`Signing with ${backendSigners.length} backend signer(s)`);
-    backendSigners.forEach((s, i) => {
-      console.log(`  ${i + 1}. ${s.publicKey.toBase58()}`);
-    });
+    console.log(`Found ${signers.length} total signers, ${backendSigners.length} backend signers`);
     
     if (backendSigners.length > 0) {
       transaction.partialSign(...backendSigners);
