@@ -209,23 +209,30 @@ app.post('/mint', async (req, res) => {
     
     // Filter to only backend signers (not the user wallet)
     // Also convert Metaplex signers to standard Keypair if needed
-    const backendSigners = [];
+    const backendSignersMap = new Map(); // Use Map to deduplicate by public key
     
     for (const signer of signers) {
       if (!signer.publicKey.equals(walletPubkey)) {
-        // Check if this is a standard Keypair or needs conversion
-        if (signer.secretKey) {
-          // It's already a Keypair-like object with secretKey
-          backendSigners.push(signer);
-        } else if (signer._keypair) {
-          // Metaplex might wrap it
-          backendSigners.push(signer._keypair);
+        const pubkeyStr = signer.publicKey.toBase58();
+        
+        // Only add if we haven't seen this public key yet
+        if (!backendSignersMap.has(pubkeyStr)) {
+          // Check if this is a standard Keypair or needs conversion
+          if (signer.secretKey) {
+            // It's already a Keypair-like object with secretKey
+            backendSignersMap.set(pubkeyStr, signer);
+          } else if (signer._keypair) {
+            // Metaplex might wrap it
+            backendSignersMap.set(pubkeyStr, signer._keypair);
+          }
         }
       }
     }
 
+    const backendSigners = Array.from(backendSignersMap.values());
+
     console.log(`User wallet (feePayer): ${walletPubkey.toBase58()}`);
-    console.log(`Backend will sign with ${backendSigners.length} signer(s):`);
+    console.log(`Backend will sign with ${backendSigners.length} unique signer(s):`);
     backendSigners.forEach((s, i) => {
       console.log(`  ${i + 1}. ${s.publicKey.toBase58()}`);
     });
